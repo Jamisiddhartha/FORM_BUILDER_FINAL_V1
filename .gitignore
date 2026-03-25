@@ -1,0 +1,63 @@
+# Global ignores for the monorepo
+node_modules/
+**/node_modules/
+
+postgres-docker/
+
+# Build outputs
+dist/
+**/dist/
+.next/
+**/.next/
+out/
+**/out/
+build/
+**/build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment
+# Global ignores for the monorepo
+node_modules/
+**/node_modules/
+
+postgres-docker/
+
+# Build outputs
+dist/
+**/dist/
+.next/
+**/.next/
+out/
+**/out/
+build/
+**/build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+.vercel
+
+# Uploads
+uploads/
+uploads/documents/
+uploads/temp/
+
+backend/migrations/
+todo.md
+apps/backend/prisma/manual-sql/20260308_add_service_name_in_hindi.sql

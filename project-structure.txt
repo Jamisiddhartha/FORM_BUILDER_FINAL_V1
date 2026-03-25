@@ -1,0 +1,14 @@
+
+C:\wamp64\www\nextjs\swcs2.0
+├── apps
+├── node_modules
+├── package-lock.json
+├── package.json
+├── project-structure.txt
+└── README.md
+
+directory: 2 file: 4
+
+
+
+[2K[1G

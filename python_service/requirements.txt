@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+psycopg2-binary
+python-dotenv
+pdfplumber
+python-docx
+requests
+# Optional — only needed when AI_MODE=gemini:
+# google-generativeai
