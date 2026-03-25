@@ -8,6 +8,7 @@ import type { DocVerificationData, DocVerificationItem } from '@/hooks/departmen
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
   U: { bg: '#fef9c3', color: '#a16207', label: 'Un-Verified' },
   V: { bg: '#dcfce7', color: '#15803d', label: 'Verified'    },
+  R: { bg: '#fee2e2', color: '#b91c1c', label: 'Rejected'    },
   M: { bg: '#fee2e2', color: '#b91c1c', label: 'Mismatch'    },
 };
 
@@ -36,9 +37,20 @@ function DocRow({
   const [comment, setComment] = useState(doc.comments || '');
   const [action, setAction]   = useState('');
   const [saving, setSaving]   = useState(false);
+  const [touched, setTouched] = useState(false);
+
+  const handleActionChange = (val: string) => {
+    setAction(val);
+    setTouched(false);
+    if (val === 'V') setComment('Verified');
+    else if (val === 'R') setComment('');
+  };
+
+  const commentError = action === 'R' && touched && !comment.trim();
 
   const handleSubmit = async () => {
     if (!action) return;
+    if (action === 'R' && !comment.trim()) { setTouched(true); return; }
     setSaving(true);
     try {
       await apiClient.post('/fb-dashboard/verify-document', {
@@ -89,15 +101,19 @@ function DocRow({
         <td style={{ ...TH }}>
           <textarea
             value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Add comment…"
+            onChange={(e) => { setComment(e.target.value); setTouched(true); }}
+            placeholder={action === 'R' ? 'Comment required…' : 'Add comment…'}
             rows={2}
             style={{
-              width: '100%', border: '1px solid #d1d5db', borderRadius: 5,
+              width: '100%', borderRadius: 5,
+              border: `1px solid ${commentError ? '#ef4444' : '#d1d5db'}`,
               padding: '4px 8px', fontSize: '0.78rem', resize: 'vertical',
               outline: 'none', boxSizing: 'border-box',
             }}
           />
+          {commentError && (
+            <span style={{ color: '#ef4444', fontSize: '0.72rem' }}>Comment is required for Reject</span>
+          )}
         </td>
       )}
 
@@ -107,7 +123,7 @@ function DocRow({
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <select
               value={action}
-              onChange={(e) => setAction(e.target.value)}
+              onChange={(e) => handleActionChange(e.target.value)}
               style={{
                 border: '1px solid #d1d5db', borderRadius: 5,
                 padding: '5px 8px', fontSize: '0.8rem', outline: 'none',
@@ -116,7 +132,7 @@ function DocRow({
             >
               <option value="">— Select —</option>
               <option value="V">Approved</option>
-              <option value="M">Reject</option>
+              <option value="R">Reject</option>
             </select>
             <button
               onClick={handleSubmit}
@@ -160,7 +176,7 @@ export default function FbDocumentVerification({
     <div>
       {/* Summary */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        {(['U','V','M'] as const).map((s) => {
+        {(['U','V','R'] as const).map((s) => {
           const cnt = data.documents.filter((d) => d.status === s).length;
           const st  = STATUS_STYLE[s];
           return (

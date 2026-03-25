@@ -45,6 +45,7 @@ const DEFAULT_TABS: TabConfig[] = [
   { key: 'forwarded', label: 'Forwarded'  },
   { key: 'approved',  label: 'Approved'   },
   { key: 'rejected',  label: 'Rejected'   },
+  { key: 'reverted',  label: 'Reverted'   },
   { key: 'history',   label: 'History'    },
 ];
 

@@ -38,12 +38,14 @@ export default function FormBuilderDashboard() {
   const config = getRoleConfig(roleId);
 
   const { data: countsData, isLoading: countsLoading } = useFbCounts(!authLoading && roleId > 0);
-  const byStatus: Record<string, number> = countsData?.byStatus ?? {};
+  const byTab: Record<string, number> = countsData?.byTab ?? {};
   const total = countsData?.total ?? 0;
 
-  const pending  = (byStatus['P']  ?? 0) + (byStatus['PENDING']  ?? 0);
-  const approved = (byStatus['A']  ?? 0) + (byStatus['APPROVED'] ?? 0);
-  const rejected = (byStatus['R']  ?? 0) + (byStatus['REJECTED'] ?? 0) + (byStatus['REJECT'] ?? 0);
+  const pending   = byTab['pending']   ?? 0;
+  const forwarded = byTab['forwarded'] ?? 0;
+  const approved  = byTab['approved']  ?? 0;
+  const rejected  = byTab['rejected']  ?? 0;
+  const reverted  = byTab['reverted']  ?? 0;
 
   if (authLoading) {
     return (
@@ -78,10 +80,11 @@ export default function FormBuilderDashboard() {
 
       {/* Stat cards */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: '1.5rem' }}>
-        <StatCard label="Pending"  value={countsLoading ? '…' : pending}  accent="#f59e0b" />
-        <StatCard label="Approved" value={countsLoading ? '…' : approved} accent="#10b981" />
-        <StatCard label="Rejected" value={countsLoading ? '…' : rejected} accent="#ef4444" />
-        <StatCard label="Total"    value={countsLoading ? '…' : total}    accent="#6366f1" />
+        <StatCard label="Pending"   value={countsLoading ? '…' : pending}   accent="#f59e0b" />
+        <StatCard label="Forwarded" value={countsLoading ? '…' : forwarded} accent="#2563eb" />
+        <StatCard label="Approved"  value={countsLoading ? '…' : approved}  accent="#10b981" />
+        <StatCard label="Rejected"  value={countsLoading ? '…' : rejected}  accent="#ef4444" />
+        <StatCard label="Reverted"  value={countsLoading ? '…' : reverted}  accent="#f97316" />
       </div>
 
       {/* Table */}

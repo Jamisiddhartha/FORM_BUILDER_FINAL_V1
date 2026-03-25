@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 
-const TAB_STATUS_MAP: Record<string, string[]> = {
-  pending:   ['P', 'PENDING'],
-  forwarded: ['F', 'FORWARDED'],
-  approved:  ['A', 'APPROVED'],
-  rejected:  ['R', 'REJECT', 'REJECTED', 'RBI', 'REVERTED'],
-  completed: ['A', 'APPROVED', 'R', 'REJECT', 'REJECTED'],
-  history:   [], // all
+// Tab → { approvStatus, actionStatuses[] }
+// approvStatus: 'P' = pending action, 'V' = action taken
+const TAB_FORWARD_FILTER: Record<string, { approvStatus: string; actionStatuses?: string[] }> = {
+  pending:   { approvStatus: 'P' },
+  forwarded: { approvStatus: 'V', actionStatuses: ['F'] },
+  approved:  { approvStatus: 'V', actionStatuses: ['A'] },
+  rejected:  { approvStatus: 'V', actionStatuses: ['R'] },
+  reverted:  { approvStatus: 'V', actionStatuses: ['RBI'] },
+  history:   { approvStatus: '' }, // all
 };
 
 @Injectable()
@@ -36,25 +38,31 @@ export class FbDashboardService {
     const actorDeptId     = Number(deptUser?.dept_id    || 0) || null;
     const actorDistrictId = Number(deptUser?.district_id || 0) || null;
     const actorUserId     = Number(options.userId);
-    // ── 2. Forward applications assigned to this role ─────────────────────────
+    // ── 2. Determine forward-table filter based on tab ────────────────────────
+    const tabFilter = TAB_FORWARD_FILTER[tab] ?? TAB_FORWARD_FILTER['pending'];
+
+    const forwardWhere: any = {
+      nextRoleId: options.userRoleId,
+      appSubId:   { not: null },
+    };
+    if (tabFilter.approvStatus)  forwardWhere.approvStatus  = tabFilter.approvStatus;
+    if (tabFilter.actionStatuses) forwardWhere.actionStatus = { in: tabFilter.actionStatuses };
+
     const forwardRows = await this.prisma.forwardApplication.findMany({
-      where: {
-        nextRoleId:   options.userRoleId,
-        appSubId:     { not: null },
-        approvStatus: 'P',
-      },
+      where:   forwardWhere,
       select: {
         appSubId:        true,
         nextUserId:      true,
         forwardedDeptId: true,
         forwardedDistId: true,
         createdOn:       true,
+        actionStatus:    true,
       },
-      distinct:  ['appSubId'],
-      orderBy: [{ createdOn: 'desc' }, { apprLvlId: 'desc' }],
+      distinct: ['appSubId'],
+      orderBy:  [{ createdOn: 'desc' }, { apprLvlId: 'desc' }],
     });
 
-    // ── 4. Match rows to this officer (by userId OR dept+district) ────────────
+    // ── 3. Match rows to this officer (by userId OR dept+district) ────────────
     const matched = forwardRows.filter((row) =>
       this.matchAssignment(row, { actorUserId, actorDeptId, actorDistrictId, actorRoleId: options.userRoleId }),
     );
@@ -127,12 +135,6 @@ export class FbDashboardService {
         };
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
-
-    // ── 8. Tab filter (by application status) ─────────────────────────────────
-    const allowedStatuses = TAB_STATUS_MAP[tab];
-    if (allowedStatuses && allowedStatuses.length) {
-      rows = rows.filter((r) => allowedStatuses.includes(r.status));
-    }
 
     const total = rows.length;
     const items = rows.slice(skip, skip + limit);
@@ -691,12 +693,16 @@ export class FbDashboardService {
 
   // ── Counts per status (for left panel stat cards) ─────────────────────────
   async getCounts(options: { userId: bigint; userRoleId: number }) {
-    const inbox = await this.getInbox({ ...options, page: 1, limit: 9999 });
-    const byStatus: Record<string, number> = {};
-    for (const item of inbox.items) {
-      byStatus[item.status] = (byStatus[item.status] || 0) + 1;
-    }
-    return { byStatus, total: inbox.total };
+    const tabs = ['pending', 'forwarded', 'approved', 'rejected', 'reverted'] as const;
+    const counts = await Promise.all(
+      tabs.map(async (tab) => {
+        const res = await this.getInbox({ ...options, tab, page: 1, limit: 9999 });
+        return [tab, res.total] as const;
+      }),
+    );
+    const byTab: Record<string, number> = Object.fromEntries(counts);
+    const total = byTab['pending'] ?? 0;
+    return { byTab, total };
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

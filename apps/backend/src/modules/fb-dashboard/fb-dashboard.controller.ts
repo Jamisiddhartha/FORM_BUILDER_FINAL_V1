@@ -214,7 +214,7 @@ export class FbDashboardController {
   ) {
     const deptUserId = Number(req.user?.id || 0);
     if (!body.mappingId) throw new BadRequestException('mappingId is required');
-    if (!['V', 'M'].includes(body.status)) throw new BadRequestException('status must be V or M');
+    if (!['V', 'R', 'M'].includes(body.status)) throw new BadRequestException('status must be V, R or M');
     return this.service.verifyDocument({ ...body, deptUserId });
   }
 
