@@ -738,6 +738,7 @@ export class FbDashboardService {
     if (['A', 'APPROVED'].includes(code))  return 'Approved';
     if (['R', 'REJECTED', 'REJECT'].includes(code)) return 'Rejected';
     if (['RBI', 'REVERTED'].includes(code)) return 'Reverted';
+    if (['H', 'REVERTED'].includes(code)) return 'Reverted';
     return code || 'Unknown';
   }
 

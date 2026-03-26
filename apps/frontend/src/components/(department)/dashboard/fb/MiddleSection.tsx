@@ -183,6 +183,8 @@ export function MiddleSection({ tabs, statusFilter, enabled }: MiddleSectionProp
               items.map((item, idx) => {
                 const sStyle = STATUS_STYLE[String(item.status || '').toUpperCase()] ?? { bg: '#f3f4f6', color: '#374151' };
                 const slaBreached = item.slaBreached === true;
+                console.log(item.status)
+                console.log(item.statusLabel)
                 return (
                   <tr
                     key={item.submissionId ?? idx}
@@ -218,13 +220,13 @@ export function MiddleSection({ tabs, statusFilter, enabled }: MiddleSectionProp
                     </td>
                     <td style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <button
+                        { item.status !='A' && item.statusLabel !='Approved' && <button
                           title="View / Process Application"
                           onClick={() => router.push(`/department/fb-dashboard/application/${item.submissionId}` as any)}
                           style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                         >
                           ⚙️ Process
-                        </button>
+                        </button> }
                         <button
                           title="Print Application"
                           onClick={() => window.open(`/en/department/fb-dashboard/application/${item.submissionId}/print`, '_blank')}
