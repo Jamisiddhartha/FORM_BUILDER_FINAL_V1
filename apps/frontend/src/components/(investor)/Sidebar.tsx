@@ -414,6 +414,7 @@ export default function Sidebar() {
   /* Menu definition */
   const menuItems: MenuItem[] = [
     { name: "Dashboard", icon: Icons.dashboard, href: "/investor/dashboard" },
+    { name: "Applied Applications", icon: Icons.list, href: "/investor/applications" },
     { name: "Inspections", icon: Icons.list, href: "/investor/inspections" },
     { name: "Investor DMS", icon: Icons.folder, href: "/investor/documents" },
     {

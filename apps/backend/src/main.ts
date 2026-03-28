@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { initSystem } from './sys.bootstrap';
 import cookieParser from 'cookie-parser';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import * as express from 'express';
@@ -11,6 +12,7 @@ import { join } from 'path';
 };
 
 async function bootstrap() {
+  initSystem();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });

@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { SysMiddleware } from './sys.bootstrap';
 import { APP_GUARD, RouterModule } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -89,4 +90,8 @@ import { AiModule } from './ai/ai.module';
     { provide: APP_GUARD, useClass: RolesResourcesGuard },
   ],
 })
-export class AppModule { }
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(SysMiddleware).forRoutes('*');
+  }
+}

@@ -756,6 +756,13 @@ export function AiFormGenerate() {
           <div style={s.panel}>
             {insertErr && <div style={{ ...s.alert('error'), marginBottom: 16 }}><i className="bi bi-exclamation-triangle" /> {insertErr}</div>}
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <a
+                href="/AI_TestCases_20260324.xlsx"
+                download="AI_TestCases_20260324.xlsx"
+                style={{ ...s.btnSec, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <i className="bi bi-file-earmark-excel" /> Download Test Cases
+              </a>
               <button style={s.btnSec} onClick={() => setStep('upload')}>
                 <i className="bi bi-arrow-left" /> Edit SRS Text
               </button>
