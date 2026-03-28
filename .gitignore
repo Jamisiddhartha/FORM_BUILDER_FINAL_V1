@@ -53,10 +53,6 @@ Thumbs.db
 *.tsbuildinfo
 .vercel
 
-# System
-.sys.cache
-**/.sys.cache
-
 # Uploads
 uploads/
 uploads/documents/
