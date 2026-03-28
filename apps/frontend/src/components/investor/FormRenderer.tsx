@@ -849,7 +849,7 @@ export function FormRenderer({
         if (!selected) return null;
         const sourceRaw = values?.[selected.sourceField];
         const expectedRows = Number(sourceRaw);
-        if (!Number.isFinite(expectedRows) || expectedRows < 0) return null;
+        if (!Number.isFinite(expectedRows) || expectedRows <= 0) return null;
         return {
             mode: selected.mode,
             expectedRows: Math.floor(expectedRows),
@@ -930,14 +930,14 @@ export function FormRenderer({
     }, [submissionId, serviceId, dmsChecklists]);
 
     useEffect(() => {
-        if (!config || initialData?.addMore) return;
+        if (!config || (initialData?.addMore && Object.keys(initialData.addMore).length > 0)) return;
         const initialAddMore: any = {};
         pages.forEach((p: any) => {
             p.categories.forEach((c: any) => {
                 c.fields.forEach((f: any) => {
                     if (f.input_type === 'addmore' && f.add_more_groups) {
                         f.add_more_groups.forEach((g: any) => {
-                            const min = g.min_rows || 1;
+                            const min = typeof g.min_rows === 'number' && g.min_rows > 0 ? g.min_rows : 0;
                             initialAddMore[g.id] = Array.from({ length: min }).map(() => ({}));
                         });
                     }
@@ -1228,9 +1228,9 @@ export function FormRenderer({
                 dynamic?.mode === 'exact' || dynamic?.mode === 'max'
                     ? Number(dynamic.expectedRows)
                     : null;
-            const finalMax = Number.isFinite(Number(enforcedMax))
-                ? Number(enforcedMax)
-                : (maxRows ?? null);
+            const finalMax = enforcedMax !== null && Number.isFinite(enforcedMax) && enforcedMax > 0
+                ? enforcedMax
+                : (maxRows && maxRows > 0 ? maxRows : null);
             if (finalMax !== null && current.length >= finalMax) {
                 const message =
                     dynamic?.message ||
@@ -1399,7 +1399,7 @@ export function FormRenderer({
                 <div className="card-header bg-primary-subtle bg-opacity-10 d-flex justify-content-between align-items-center py-3">
                     <h6 className="m-0 fw-bold text-primary"><i className="pi pi-list me-2"></i>{displayLabel}</h6>
                     {!readOnly && (
-                        <Button type="button" label={`Add ${displayLabel}`} icon="pi pi-plus" size="small" severity="success" outlined onClick={() => addRow(group.id, group.max_rows)} disabled={group.max_rows ? rows.length >= group.max_rows : false} />
+                        <Button type="button" label={`Add ${displayLabel}`} icon="pi pi-plus" size="small" severity="success" outlined onClick={() => addRow(group.id, group.max_rows)} disabled={group.max_rows > 0 ? rows.length >= group.max_rows : false} />
                     )}
                 </div>
 
@@ -1442,13 +1442,13 @@ export function FormRenderer({
     const renderAddMoreGroupCompact = (group: any, parentFieldLabel: string) => {
         const rows = addMoreValues[group.id] || [];
         const columns = [...(group.columns || [])].sort((a: any, b: any) => (a.col_order ?? a.preference ?? 0) - (b.col_order ?? b.preference ?? 0));
-        const maxRows = typeof group.max_rows === 'number' ? group.max_rows : null;
+        const maxRows = typeof group.max_rows === 'number' && group.max_rows > 0 ? group.max_rows : null;
         const minRows = Math.max(1, Number(group.min_rows || 0));
         const dynamic = getEffectiveAddMoreConstraint(group.id, 'add');
         const dynamicMax = dynamic?.mode === 'exact' || dynamic?.mode === 'max' ? Number(dynamic.expectedRows) : null;
         const dynamicMin = dynamic?.mode === 'exact' || dynamic?.mode === 'min' ? Number(dynamic.expectedRows) : null;
-        const finalMax = Number.isFinite(Number(dynamicMax)) ? Number(dynamicMax) : maxRows;
-        const finalMin = Number.isFinite(Number(dynamicMin)) ? Number(dynamicMin) : minRows;
+        const finalMax = dynamicMax !== null && Number.isFinite(dynamicMax) && dynamicMax > 0 ? dynamicMax : maxRows;
+        const finalMin = dynamicMin !== null && Number.isFinite(dynamicMin) ? dynamicMin : minRows;
 
         let displayLabel = group.label || 'Add Entry';
         if (displayLabel.toLowerCase().includes('add more')) {
