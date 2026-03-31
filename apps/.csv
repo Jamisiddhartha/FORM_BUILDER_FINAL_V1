@@ -1,0 +1,4 @@
+code,name,description,parent_code,valid_from,valid_to,sort_order,is_active,metadata
+HEAD_OFFICE,Head Office,Top-level office,,2026-04-01,2027-03-31,1,true,"{}"
+DISTRICT_OFFICE,District Office,Child under head office,HEAD_OFFICE,2026-04-01,2027-03-31,2,true,"{}"
+FIELD_UNIT,Field Unit,Child under district office,DISTRICT_OFFICE,2026-04-01,2027-03-31,3,true,"{}"

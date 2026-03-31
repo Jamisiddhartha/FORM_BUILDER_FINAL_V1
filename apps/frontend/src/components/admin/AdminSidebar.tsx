@@ -259,6 +259,11 @@ export const AdminSidebar = () => {
           label: 'KYI IC Calculator',
           icon: 'bi-calculator',
         },
+        {
+          href: '/admin/master/master-data-management',
+          label: 'Master Data Management',
+          icon: 'bi-database-gear',
+        },
       ],
     },
     {

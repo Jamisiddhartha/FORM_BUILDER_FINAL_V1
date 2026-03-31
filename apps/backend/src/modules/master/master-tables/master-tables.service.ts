@@ -6,6 +6,22 @@ import { CreateMasterTableDto, UpdateMasterTableDto } from './dto';
 export class MasterTablesService {
     constructor(private prisma: PrismaService) { }
 
+    private sanitizeIdentifier(identifier: string) {
+        const normalized = String(identifier || '')
+            .trim()
+            .replace(/[^a-zA-Z0-9_]+/g, '_');
+
+        if (!normalized || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(normalized)) {
+            throw new Error(`Invalid identifier: ${identifier}`);
+        }
+
+        return normalized;
+    }
+
+    private quoteIdentifier(identifier: string) {
+        return `"${this.sanitizeIdentifier(identifier).replace(/"/g, '""')}"`;
+    }
+
     async create(data: CreateMasterTableDto) {
         return this.prisma.master_tables.create({
             data: {
@@ -102,6 +118,7 @@ export class MasterTablesService {
         }
 
         const {
+            schema_name,
             table_name,
             value_column,
             label_column,
@@ -123,11 +140,11 @@ export class MasterTablesService {
         if (is_active_column && is_active_value) {
             // Handle different types of is_active_value
             if (is_active_value.toLowerCase() === 'true') {
-                conditions.push(`"${is_active_column}" = true`);
+                conditions.push(`${this.quoteIdentifier(is_active_column)} = true`);
             } else if (is_active_value.toLowerCase() === 'false') {
-                conditions.push(`"${is_active_column}" = false`);
+                conditions.push(`${this.quoteIdentifier(is_active_column)} = false`);
             } else {
-                conditions.push(`"${is_active_column}" = $${paramIndex}`);
+                conditions.push(`${this.quoteIdentifier(is_active_column)} = $${paramIndex}`);
                 params.push(is_active_value);
                 paramIndex++;
             }
@@ -135,7 +152,7 @@ export class MasterTablesService {
 
         // Parent filter for cascading dropdowns
         if (parent_column && parentValue) {
-            conditions.push(`"${parent_column}" = $${paramIndex}`);
+            conditions.push(`${this.quoteIdentifier(parent_column)} = $${paramIndex}`);
             // Try to parse as number, otherwise use as string
             const parsedValue = !isNaN(Number(parentValue)) ? Number(parentValue) : parentValue;
             params.push(parsedValue);
@@ -145,20 +162,20 @@ export class MasterTablesService {
         // Default filters from JSON config
         if (default_filter && typeof default_filter === 'object') {
             for (const [key, value] of Object.entries(default_filter)) {
-                conditions.push(`"${key}" = $${paramIndex}`);
+                conditions.push(`${this.quoteIdentifier(key)} = $${paramIndex}`);
                 params.push(value);
                 paramIndex++;
             }
         }
 
         // Build SELECT columns
-        let selectColumns = `"${value_column}" as value, "${label_column}" as label`;
+        let selectColumns = `${this.quoteIdentifier(value_column)} as value, ${this.quoteIdentifier(label_column)} as label`;
         if (secondary_label) {
-            selectColumns += `, "${secondary_label}" as secondary_label`;
+            selectColumns += `, ${this.quoteIdentifier(secondary_label)} as secondary_label`;
         }
 
         // Build query
-        let query = `SELECT ${selectColumns} FROM "${table_name}"`;
+        let query = `SELECT ${selectColumns} FROM ${this.quoteIdentifier(schema_name || 'public')}.${this.quoteIdentifier(table_name)}`;
 
         if (conditions.length > 0) {
             query += ` WHERE ${conditions.join(' AND ')}`;
@@ -168,7 +185,7 @@ export class MasterTablesService {
         if (default_order_by) {
             query += ` ORDER BY ${default_order_by}`;
         } else {
-            query += ` ORDER BY "${label_column}" ASC`;
+            query += ` ORDER BY ${this.quoteIdentifier(label_column)} ASC`;
         }
 
         // Execute query

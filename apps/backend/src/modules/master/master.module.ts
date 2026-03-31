@@ -55,6 +55,7 @@ import { LandAllotmentStageModule } from './landAllotmentStage/land-allotment-st
 import { WorkflowJurisdictionLevelModule } from './workflowJurisdictionLevel/workflow-jurisdiction-level.module';
 import { WorkflowAssignmentStrategyModule } from './workflowAssignmentStrategy/workflow-assignment-strategy.module';
 import { WorkflowActionMasterModule } from './workflowActionMaster/workflow-action-master.module';
+import { MasterDataManagementModule } from './masterDataManagement/master-data-management.module';
 
 @Module({
 
@@ -115,6 +116,7 @@ import { WorkflowActionMasterModule } from './workflowActionMaster/workflow-acti
     WorkflowJurisdictionLevelModule,
     WorkflowAssignmentStrategyModule,
     WorkflowActionMasterModule,
+    MasterDataManagementModule,
   ],
   controllers: [],
   providers: [],

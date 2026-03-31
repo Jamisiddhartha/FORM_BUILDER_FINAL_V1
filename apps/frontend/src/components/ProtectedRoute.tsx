@@ -2,7 +2,8 @@
 
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from '@/navigation';
-import { ReactNode, useEffect, useMemo,useState,useRef } from 'react';
+import { usePathname } from 'next/navigation';
+import { ReactNode, useEffect, useMemo } from 'react';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -12,8 +13,8 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const { user, roles, loading } = useAuth();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
-  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pathname = usePathname();
+  const locale = pathname?.split('/')[1] || 'en';
 
   const isAuthorized = useMemo(() => {
     if (loading) return true; // Wait for loading to finish
@@ -43,18 +44,38 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
   useEffect(() => {
     if (!loading && !isAuthorized) {
       if (!user) {
-        router.push('/login');
+        const localizedLoginPath = `/${locale}/login`;
+        router.replace('/login');
+
+        if (typeof window !== 'undefined') {
+          const redirectTimeout = window.setTimeout(() => {
+            if (window.location.pathname !== localizedLoginPath) {
+              window.location.replace(localizedLoginPath);
+            }
+          }, 300);
+
+          return () => window.clearTimeout(redirectTimeout);
+        }
       } else {
         // User is logged in but unauthorized
         // We can redirect them to their appropriate dashboard or show unauthorized
         // For now, we let the render logic show the "Unauthorized Access" message
       }
     }
-  }, [loading, isAuthorized, user, router]);
+  }, [loading, isAuthorized, user, router, locale]);
 
   if (loading) return <div className="d-flex justify-content-center p-5"><div className="spinner-border text-primary" role="status"></div></div>;
 
-  if (!user) return null; // Will redirect in useEffect
+  if (!user) {
+    return (
+      <div className="d-flex justify-content-center align-items-center p-5" style={{ minHeight: '60vh' }}>
+        <div className="text-center">
+          <div className="spinner-border text-primary mb-3" role="status" />
+          <p className="mb-0 text-muted">Redirecting to login...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthorized) {
     return (

@@ -62,6 +62,13 @@ enum OptionSourceType {
   MASTER
 }
 
+enum MasterDataUploadStatus {
+  PENDING
+  PARTIAL
+  COMPLETED
+  FAILED
+}
+
 // ------------------------------------------------------
 // USERS
 // ------------------------------------------------------
@@ -263,10 +270,12 @@ model Department {
   issuerId          Int?
   investorDocuments InvestorDocument[]
 
-  services         Service[]
-  kyiIcCalculators KyiIcCalculator[]
-  actMappings      ActPolicyNotificationDepartment[]
-  workflowConfigs  ApplicationWorkflowConfiguration[]
+  services          Service[]
+  kyiIcCalculators  KyiIcCalculator[]
+  actMappings       ActPolicyNotificationDepartment[]
+  workflowConfigs   ApplicationWorkflowConfiguration[]
+  subDepartments    SubDepartment[]
+  masterDefinitions MasterDataDefinition[]             @relation("MasterDefinitionDefaultDepartment")
 
   @@map("m_departments")
 }
@@ -480,13 +489,13 @@ model FormFieldOptionConfig {
 }
 
 model FormBuilderConfigValue {
-  id         Int     @id @default(autoincrement())
-  useFor     String? @map("use_for") @db.VarChar(255)
-  fieldCode  String? @map("field_code") @db.VarChar(255)
-  tableName  String? @map("table_name") @db.VarChar(255)
-  serviceId  String  @default("0") @map("service_id") @db.Char(20)
-  rawQuery   String? @map("raw_query") @db.Text
-  isActive   String  @default("t") @map("isActive") @db.Char(1)
+  id        Int     @id @default(autoincrement())
+  useFor    String? @map("use_for") @db.VarChar(255)
+  fieldCode String? @map("field_code") @db.VarChar(255)
+  tableName String? @map("table_name") @db.VarChar(255)
+  serviceId String  @default("0") @map("service_id") @db.Char(20)
+  rawQuery  String? @map("raw_query") @db.Text
+  isActive  String  @default("t") @map("isActive") @db.Char(1)
 
   @@index([serviceId, isActive])
   @@index([useFor])
@@ -849,8 +858,90 @@ model master_tables {
   updated_at             DateTime                @updatedAt @db.Timestamptz(6)
   created_by             String?                 @db.VarChar(100)
   formFieldOptionConfigs FormFieldOptionConfig[]
+  masterDefinitions      MasterDataDefinition[]
 
   @@map("master_tables")
+}
+
+model MasterDataProject {
+  id                Int                    @id @default(autoincrement())
+  name              String                 @db.VarChar(150)
+  code              String                 @unique @db.VarChar(50)
+  description       String?                @db.Text
+  schemaName        String                 @unique @map("schema_name") @db.VarChar(63)
+  isActive          Boolean                @default(true) @map("is_active")
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  masterDefinitions MasterDataDefinition[]
+
+  @@map("mdm_projects")
+}
+
+model SubDepartment {
+  id                Int                    @id @default(autoincrement())
+  departmentId      Int                    @map("department_id")
+  name              String                 @db.VarChar(150)
+  code              String?                @db.VarChar(50)
+  isActive          Boolean                @default(true) @map("is_active")
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  department        Department             @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  masterDefinitions MasterDataDefinition[] @relation("MasterDefinitionDefaultSubDepartment")
+
+  @@unique([departmentId, name], map: "uniq_sub_department_department_name")
+  @@index([departmentId], map: "idx_sub_departments_department_id")
+  @@map("m_sub_departments")
+}
+
+model MasterDataDefinition {
+  id                     Int                     @id @default(autoincrement())
+  projectId              Int                     @map("project_id")
+  name                   String                  @db.VarChar(150)
+  code                   String                  @db.VarChar(80)
+  description            String?                 @db.Text
+  schemaName             String                  @map("schema_name") @db.VarChar(63)
+  tableName              String                  @map("table_name") @db.VarChar(63)
+  supportsHierarchy      Boolean                 @default(true) @map("supports_hierarchy")
+  hasValidityPeriod      Boolean                 @default(true) @map("has_validity_period")
+  mapDepartment          Boolean                 @default(false) @map("map_department")
+  mapSubDepartment       Boolean                 @default(false) @map("map_sub_department")
+  defaultDepartmentId    Int?                    @map("default_department_id")
+  defaultSubDepartmentId Int?                    @map("default_sub_department_id")
+  validFrom              DateTime?               @map("valid_from") @db.Date
+  validTo                DateTime?               @map("valid_to") @db.Date
+  masterTableId          Int?                    @unique @map("master_table_id")
+  isActive               Boolean                 @default(true) @map("is_active")
+  createdBy              String?                 @map("created_by") @db.VarChar(100)
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+  project                MasterDataProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  defaultDepartment      Department?             @relation("MasterDefinitionDefaultDepartment", fields: [defaultDepartmentId], references: [id], onDelete: SetNull)
+  defaultSubDepartment   SubDepartment?          @relation("MasterDefinitionDefaultSubDepartment", fields: [defaultSubDepartmentId], references: [id], onDelete: SetNull)
+  masterTable            master_tables?          @relation(fields: [masterTableId], references: [id], onDelete: SetNull)
+  uploadBatches          MasterDataUploadBatch[]
+
+  @@unique([projectId, code], map: "uniq_master_definition_project_code")
+  @@index([projectId], map: "idx_master_definition_project_id")
+  @@index([defaultDepartmentId], map: "idx_master_definition_department_id")
+  @@index([defaultSubDepartmentId], map: "idx_master_definition_sub_department_id")
+  @@map("mdm_master_definitions")
+}
+
+model MasterDataUploadBatch {
+  id                 Int                    @id @default(autoincrement())
+  masterDefinitionId Int                    @map("master_definition_id")
+  fileName           String                 @map("file_name") @db.VarChar(255)
+  status             MasterDataUploadStatus @default(PENDING)
+  totalRows          Int                    @default(0) @map("total_rows")
+  successfulRows     Int                    @default(0) @map("successful_rows")
+  failedRows         Int                    @default(0) @map("failed_rows")
+  errorReport        Json?                  @map("error_report") @db.JsonB
+  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  masterDefinition   MasterDataDefinition   @relation(fields: [masterDefinitionId], references: [id], onDelete: Cascade)
+
+  @@index([masterDefinitionId], map: "idx_master_upload_master_definition_id")
+  @@map("mdm_master_upload_batches")
 }
 
 model Servicetype {
@@ -1295,15 +1386,15 @@ model FinancialParameter {
 }
 
 model KyiIcCalculator {
-  id                     Int     @id @default(autoincrement())
-  benefit_percent_amount       Float?
-  cap_limit                    Float?
-  extra_fixed_amount           Float?
-  above_calculating_amount     Float?
-  years_of_recurring     Int?
-  eligibility_notes      String? @db.VarChar(255)
-  description            String? @db.VarChar(255)
-  limitation             String? @db.VarChar(255)
+  id                       Int     @id @default(autoincrement())
+  benefit_percent_amount   Float?
+  cap_limit                Float?
+  extra_fixed_amount       Float?
+  above_calculating_amount Float?
+  years_of_recurring       Int?
+  eligibility_notes        String? @db.VarChar(255)
+  description              String? @db.VarChar(255)
+  limitation               String? @db.VarChar(255)
 
   policy_id Int?
   policy    policy_master? @relation(fields: [policy_id], references: [id])
@@ -1702,7 +1793,7 @@ model InspectionTransaction {
   financialYear String? @map("financial_year") // "2025-2026"
 
   // AI Integration: Summary of completion
-  aiSummary String? @db.Text @map("ai_summary")
+  aiSummary String? @map("ai_summary") @db.Text
 
   // Relations to existing models
   observations InspectionObservation[]
@@ -1928,58 +2019,58 @@ enum AssignmentStrategy {
 }
 
 model ApplicationWorkflowConfiguration {
-  id                         Int             @id @default(autoincrement())
-  step                       Int             @default(0)
-  departmentId               Int             @map("department_id")
-  serviceId                  String          @map("service_id") @db.VarChar(20)
-  configVersion              Int             @default(1) @map("config_version")
+  id                         Int                  @id @default(autoincrement())
+  step                       Int                  @default(0)
+  departmentId               Int                  @map("department_id")
+  serviceId                  String               @map("service_id") @db.VarChar(20)
+  configVersion              Int                  @default(1) @map("config_version")
   status                     WorkflowConfigStatus @default(DRAFT) @map("status")
-  startDate                  DateTime        @default(now()) @map("start_date")
-  endDate                    DateTime?       @map("end_date")
-  roleId                     Int             @default(0) @map("role_id")
-  jurisdictionLevelId        Int?            @map("jurisdiction_level_id")
-  assignmentStrategyId       Int?            @map("assignment_strategy_id")
-  actionMasterIdsJson        Json            @default("[]") @map("action_master_ids_json") @db.JsonB
-  jurisdictionLevel          JurisdictionLevel @default(DISTRICT) @map("jurisdiction_level")
-  assignmentStrategy         AssignmentStrategy @default(ROLE) @map("assignment_strategy")
-  assignmentRuleJson         Json?           @map("assignment_rule_json") @db.JsonB
-  actionAllowedJson          Json            @default("[]") @map("action_allowed_json") @db.JsonB
-  transitionMapJson          Json            @default("{}") @map("transition_map_json") @db.JsonB
-  slaHours                   Int             @default(0) @map("sla_hours")
-  slaBreachRequiresReason    Boolean         @default(true) @map("sla_breach_requires_reason")
-  nextAllocationRoleId       Int?            @map("next_allocation_role_id")
-  createdBy                  String?         @map("created_by") @db.VarChar(100)
-  createdAt                  DateTime        @default(now()) @map("created_at")
-  updatedBy                  String?         @map("updated_by") @db.VarChar(100)
-  updatedAt                  DateTime        @default(now()) @updatedAt @map("updated_at")
-  processingLevel            ProcessingLevel @default(District) @map("processing_level")
-  currentRoleId              Int             @map("current_role_id")
-  formTypeId                 Int             @map("form_type_id")
-  nextRoleId                 Int             @map("next_role_id")
-  approverId                 Int             @map("approver_id")
-  forwardRoleId              Int             @map("forward_role_id")
-  revertRoleId               Int             @map("revert_role_id")
-  isDelayReasonRequired      ActiveStatus    @default(N) @map("is_delay_reason_required")
-  timeInHours                String          @default("0") @map("time_in_hours") @db.VarChar(10)
-  canRevertToInvestor        ActiveStatus    @default(N) @map("can_revert_to_investor")
-  canVerifyDocument          ActiveStatus    @default(N) @map("can_verify_document")
-  canForwardToMultipleRoleId String?         @map("can_forward_to_multiple_role_id") @db.VarChar(255)
-  canForwardToMultipleUserId String?         @map("can_forward_to_multiple_user_id") @db.VarChar(255)
-  isOwnDepartment            ActiveStatus    @default(N) @map("is_own_department")
-  permissableTabFormId       String          @map("permissable_tab_form_id") @db.VarChar(255)
-  documentShowLast           ActiveStatus    @default(N) @map("document_show_last")
-  processAnytime             ActiveStatus    @default(N) @map("process_anytime")
-  showLiceneceList           String          @default("0") @map("show_licenece_list") @db.Char(1)
-  showFieldEditableOrNot     String          @default("0") @map("show_field_editable_or_not") @db.Char(1)
-  formServiceJs              String          @default("") @map("form_service_js") @db.VarChar(255)
-  formActionController       String          @default("") @map("form_action_controller") @db.VarChar(255)
-  subformActionName          String          @map("subform_action_name") @db.VarChar(255)
-  licenceNumberFormat        String?         @map("licence_number_format") @db.VarChar(255)
+  startDate                  DateTime             @default(now()) @map("start_date")
+  endDate                    DateTime?            @map("end_date")
+  roleId                     Int                  @default(0) @map("role_id")
+  jurisdictionLevelId        Int?                 @map("jurisdiction_level_id")
+  assignmentStrategyId       Int?                 @map("assignment_strategy_id")
+  actionMasterIdsJson        Json                 @default("[]") @map("action_master_ids_json") @db.JsonB
+  jurisdictionLevel          JurisdictionLevel    @default(DISTRICT) @map("jurisdiction_level")
+  assignmentStrategy         AssignmentStrategy   @default(ROLE) @map("assignment_strategy")
+  assignmentRuleJson         Json?                @map("assignment_rule_json") @db.JsonB
+  actionAllowedJson          Json                 @default("[]") @map("action_allowed_json") @db.JsonB
+  transitionMapJson          Json                 @default("{}") @map("transition_map_json") @db.JsonB
+  slaHours                   Int                  @default(0) @map("sla_hours")
+  slaBreachRequiresReason    Boolean              @default(true) @map("sla_breach_requires_reason")
+  nextAllocationRoleId       Int?                 @map("next_allocation_role_id")
+  createdBy                  String?              @map("created_by") @db.VarChar(100)
+  createdAt                  DateTime             @default(now()) @map("created_at")
+  updatedBy                  String?              @map("updated_by") @db.VarChar(100)
+  updatedAt                  DateTime             @default(now()) @updatedAt @map("updated_at")
+  processingLevel            ProcessingLevel      @default(District) @map("processing_level")
+  currentRoleId              Int                  @map("current_role_id")
+  formTypeId                 Int                  @map("form_type_id")
+  nextRoleId                 Int                  @map("next_role_id")
+  approverId                 Int                  @map("approver_id")
+  forwardRoleId              Int                  @map("forward_role_id")
+  revertRoleId               Int                  @map("revert_role_id")
+  isDelayReasonRequired      ActiveStatus         @default(N) @map("is_delay_reason_required")
+  timeInHours                String               @default("0") @map("time_in_hours") @db.VarChar(10)
+  canRevertToInvestor        ActiveStatus         @default(N) @map("can_revert_to_investor")
+  canVerifyDocument          ActiveStatus         @default(N) @map("can_verify_document")
+  canForwardToMultipleRoleId String?              @map("can_forward_to_multiple_role_id") @db.VarChar(255)
+  canForwardToMultipleUserId String?              @map("can_forward_to_multiple_user_id") @db.VarChar(255)
+  isOwnDepartment            ActiveStatus         @default(N) @map("is_own_department")
+  permissableTabFormId       String               @map("permissable_tab_form_id") @db.VarChar(255)
+  documentShowLast           ActiveStatus         @default(N) @map("document_show_last")
+  processAnytime             ActiveStatus         @default(N) @map("process_anytime")
+  showLiceneceList           String               @default("0") @map("show_licenece_list") @db.Char(1)
+  showFieldEditableOrNot     String               @default("0") @map("show_field_editable_or_not") @db.Char(1)
+  formServiceJs              String               @default("") @map("form_service_js") @db.VarChar(255)
+  formActionController       String               @default("") @map("form_action_controller") @db.VarChar(255)
+  subformActionName          String               @map("subform_action_name") @db.VarChar(255)
+  licenceNumberFormat        String?              @map("licence_number_format") @db.VarChar(255)
 
-  department Department? @relation(fields: [departmentId], references: [id])
-  service    Service?    @relation(fields: [serviceId], references: [service_id])
-  formType   FormType?   @relation(fields: [formTypeId], references: [id])
-  jurisdictionLevelMaster WorkflowJurisdictionLevelMaster? @relation(fields: [jurisdictionLevelId], references: [id])
+  department               Department?                       @relation(fields: [departmentId], references: [id])
+  service                  Service?                          @relation(fields: [serviceId], references: [service_id])
+  formType                 FormType?                         @relation(fields: [formTypeId], references: [id])
+  jurisdictionLevelMaster  WorkflowJurisdictionLevelMaster?  @relation(fields: [jurisdictionLevelId], references: [id])
   assignmentStrategyMaster WorkflowAssignmentStrategyMaster? @relation(fields: [assignmentStrategyId], references: [id])
 
   @@index([departmentId])
@@ -2051,31 +2142,31 @@ model ApplicationSubmission {
 }
 
 model WorkflowInstance {
-  id                        BigInt   @id @default(autoincrement()) @map("id")
-  applicationId             BigInt   @map("application_id")
-  workflowDefinitionVersion Int      @map("workflow_definition_version")
-  currentStep               Int      @map("current_step")
-  currentRoleId             Int      @map("current_role_id")
-  jurisdictionLevel         String   @map("jurisdiction_level")
-  status                    String   @map("status")
+  id                        BigInt    @id @default(autoincrement()) @map("id")
+  applicationId             BigInt    @map("application_id")
+  workflowDefinitionVersion Int       @map("workflow_definition_version")
+  currentStep               Int       @map("current_step")
+  currentRoleId             Int       @map("current_role_id")
+  jurisdictionLevel         String    @map("jurisdiction_level")
+  status                    String    @map("status")
   dueAt                     DateTime? @map("due_at")
-  createdAt                 DateTime @default(now()) @map("created_at")
-  updatedAt                 DateTime @default(now()) @updatedAt @map("updated_at")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @default(now()) @updatedAt @map("updated_at")
 
   @@index([applicationId])
   @@map("t_workflow_instance")
 }
 
 model WorkflowAudit {
-  id           BigInt   @id @default(autoincrement()) @map("id")
-  applicationId BigInt  @map("application_id")
-  fromStep     Int?     @map("from_step")
-  toStep       Int?     @map("to_step")
-  action       String   @map("action") @db.VarChar(64)
-  actorUserId  BigInt   @map("actor_user_id")
-  remarks      String?  @map("remarks") @db.Text
-  payload      Json?    @map("payload") @db.JsonB
-  createdAt    DateTime @default(now()) @map("created_at")
+  id            BigInt   @id @default(autoincrement()) @map("id")
+  applicationId BigInt   @map("application_id")
+  fromStep      Int?     @map("from_step")
+  toStep        Int?     @map("to_step")
+  action        String   @map("action") @db.VarChar(64)
+  actorUserId   BigInt   @map("actor_user_id")
+  remarks       String?  @map("remarks") @db.Text
+  payload       Json?    @map("payload") @db.JsonB
+  createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([applicationId])
   @@map("t_workflow_audit")
@@ -2247,18 +2338,18 @@ model ApplicationDmsDocumentsMapping {
 }
 
 model ApplicationDmsDocumentsMappingLog {
-  id                 BigInt   @id @default(autoincrement()) @map("d")
-  mappingId          BigInt   @map("mapping_id")
-  documentsId        BigInt   @map("documents_id")
-  status             String   @default("U") @db.VarChar(1)
-  deptUserId         Int      @map("dept_user_id")
-  verifierName       String?  @map("verifier_name") @db.VarChar(100)
-  verifierDesignation String? @map("verifier_designation") @db.VarChar(100)
-  verifierComments   String?  @map("verifier_comments") @db.VarChar(255)
-  createdTime        DateTime @map("created_time")
-  isDraft            String   @default("0") @map("is_draft") @db.VarChar(1)
-  remoteIp           String?  @map("remote_ip") @db.VarChar(20)
-  userAgent          String?  @map("user_agent") @db.VarChar(255)
+  id                  BigInt   @id @default(autoincrement()) @map("d")
+  mappingId           BigInt   @map("mapping_id")
+  documentsId         BigInt   @map("documents_id")
+  status              String   @default("U") @db.VarChar(1)
+  deptUserId          Int      @map("dept_user_id")
+  verifierName        String?  @map("verifier_name") @db.VarChar(100)
+  verifierDesignation String?  @map("verifier_designation") @db.VarChar(100)
+  verifierComments    String?  @map("verifier_comments") @db.VarChar(255)
+  createdTime         DateTime @map("created_time")
+  isDraft             String   @default("0") @map("is_draft") @db.VarChar(1)
+  remoteIp            String?  @map("remote_ip") @db.VarChar(20)
+  userAgent           String?  @map("user_agent") @db.VarChar(255)
 
   @@index([mappingId])
   @@index([documentsId])
@@ -2553,9 +2644,9 @@ model IncentiveApplicationFlowlog {
 
   approvedAmountByDepartment  String? @map("approved_amount_by_department") @db.VarChar(64)
   disbursedAmountByDepartment String? @map("disbursed_amount_by_department") @db.VarChar(64)
-  remarks                    String?
-  delayRemarks               String? @map("delay_remarks")
-  additionalPostData         String? @map("additional_post_data")
+  remarks                     String?
+  delayRemarks                String? @map("delay_remarks")
+  additionalPostData          String? @map("additional_post_data")
 
   approvalStatus ApprovalStatus
   actionStatus   ApplicationStatus @map("action_status")

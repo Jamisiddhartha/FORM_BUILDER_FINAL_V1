@@ -1,0 +1,18 @@
+
+> frontend@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.1 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.137.114:3000
+- Environments: .env.local
+✓ Ready in 1488ms
+Creating turbopack project {
+  dir: 'C:\\Users\\VE912YL\\form_builder_final_v1\\apps\\frontend',
+  testMode: true
+}
+
+ GET /en/admin/master/country 200 in 5.1s (next.js: 2.9s, proxy.ts: 309ms, application-code: 1885ms)
+ GET /en/admin/master/country 200 in 911ms (next.js: 680ms, proxy.ts: 17ms, application-code: 214ms)
+ GET /en/admin/master/country 200 in 228ms (next.js: 44ms, proxy.ts: 20ms, application-code: 164ms)
+ GET /api/auth/profile 404 in 398ms (next.js: 153ms, application-code: 246ms)
