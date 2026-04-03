@@ -1,6 +1,9 @@
 import { IsInt, IsOptional, IsString, IsEnum, IsJSON } from "class-validator";
 import { ApplicationStatus, RecordStatus } from "@prisma/client";
 
+// Re-export enums for use in other modules
+export { ApplicationStatus, RecordStatus };
+
 export class CreateIncentiveApplicationSubmissionDto {
   @IsOptional()
   @IsInt()

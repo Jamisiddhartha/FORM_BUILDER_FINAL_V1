@@ -1,1 +1,358 @@
 ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+(node:23628) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[browser] Logout API call failed: AxiosError: Request failed with status code 401
+    at async useAuth.useCallback[logout] (src/hooks/useAuth.ts:147:7)
+  145 |   const logout = useCallback(async () => {
+  146 |     try {
+> 147 |       await apiClient.post('/auth/logout');
+      |       ^
+  148 |     } catch (error) {
+  149 |       console.error('Logout API call failed:', error);
+  150 |     } finally { (src/hooks/useAuth.ts:149:15)
+[browser] Image with src "http://localhost:3000/img/icons/icon-sra.svg" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/msme.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/ukpcb.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/digital-india.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/startup-uk.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/logo-main.png" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] In HTML, <button> cannot be a descendant of <button>.
+This will cause a hydration error.
+
+  ...
+    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+      <RedirectBoundary>
+        <RedirectErrorBoundary router={{...}}>
+          <InnerLayoutRouter url="/en/admin/..." tree={[...]} params={{locale:"en"}} cacheNode={{rsc:<Fragment>, ...}} ...>
+            <SegmentViewNode type="page" pagePath="[locale]/a...">
+              <SegmentTrieNode>
+              <MasterDataManagementPage>
+                <MasterDataManagement>
+                  <div className="p-4">
+                    <Toast>
+                    <Toolbar>
+                    <div className="row g-4">
+                      <div className="col-xl-4">
+                        <div className="card borde...">
+                          <div className="card-body">
+                            <div>
+                            <div className="d-flex fle...">
+>                             <button
+>                               type="button"
+>                               className="text-start border rounded-3 p-3 bg-white border-primary shadow-sm"
+>                               onClick={function onClick}
+>                             >
+                                <div>
+                                <div>
+                                <div>
+                                <div className="d-flex gap...">
+                                  <Button icon="pi pi-pencil" text={true} rounded={true} onClick={function onClick}>
+>                                   <button
+>                                     ref={{current:null}}
+>                                     aria-label={undefined}
+>                                     data-pc-autofocus={undefined}
+>                                     className="p-button p-component p-button-icon-only p-button-text p-button-rounded"
+>                                     disabled={false}
+>                                     onClick={function onClick}
+>                                     data-pc-name="button"
+>                                     data-pc-section="root"
+>                                   >
+                                  ...
+                      ...
+                    ...
+            ...
+          ...
+ 
+[browser] <button> cannot contain a nested <button>.
+See this log for the ancestor stack trace. 
+[browser] ⨯ unhandledRejection: AxiosError: Request failed with status code 401
+    at async useDeleteMasterDataRecord.useMutation [as mutationFn] (src/hooks/master/useMasterDataManagement.ts:321:9)
+  319 |     }) =>
+  320 |       (
+> 321 |         await apiClient.delete(
+      |         ^
+  322 |           `/master/master-data-management/definitions/${definitionId}/records/${recordId}`,
+  323 |         )
+  324 |       ).data,
+[browser] ⨯ unhandledRejection: AxiosError: Request failed with status code 401
+    at async useDeleteMasterDataRecord.useMutation [as mutationFn] (src/hooks/master/useMasterDataManagement.ts:321:9)
+  319 |     }) =>
+  320 |       (
+> 321 |         await apiClient.delete(
+      |         ^
+  322 |           `/master/master-data-management/definitions/${definitionId}/records/${recordId}`,
+  323 |         )
+  324 |       ).data,
+[browser] Logout API call failed: AxiosError: Request failed with status code 401
+    at async useAuth.useCallback[logout] (src/hooks/useAuth.ts:147:7)
+  145 |   const logout = useCallback(async () => {
+  146 |     try {
+> 147 |       await apiClient.post('/auth/logout');
+      |       ^
+  148 |     } catch (error) {
+  149 |       console.error('Logout API call failed:', error);
+  150 |     } finally { (src/hooks/useAuth.ts:149:15)
+[browser] Image with src "/img/logo-main.png" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+[browser] Image with src "http://localhost:3000/img/icons/icon-sra.svg" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/msme.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/ukpcb.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/digital-india.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/startup-uk.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] In HTML, <button> cannot be a descendant of <button>.
+This will cause a hydration error.
+
+  ...
+    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+      <RedirectBoundary>
+        <RedirectErrorBoundary router={{...}}>
+          <InnerLayoutRouter url="/en/admin/..." tree={[...]} params={{locale:"en"}} cacheNode={{rsc:<Fragment>, ...}} ...>
+            <SegmentViewNode type="page" pagePath="[locale]/a...">
+              <SegmentTrieNode>
+              <MasterDataManagementPage>
+                <MasterDataManagement>
+                  <div className="p-4">
+                    <Toast>
+                    <Toolbar>
+                    <div className="row g-4">
+                      <div className="col-xl-4">
+                        <div className="card borde...">
+                          <div className="card-body">
+                            <div>
+                            <div className="d-flex fle...">
+>                             <button
+>                               type="button"
+>                               className="text-start border rounded-3 p-3 bg-white border-primary shadow-sm"
+>                               onClick={function onClick}
+>                             >
+                                <div>
+                                <div>
+                                <div>
+                                <div className="d-flex gap...">
+                                  <Button icon="pi pi-pencil" text={true} rounded={true} onClick={function onClick}>
+>                                   <button
+>                                     ref={{current:null}}
+>                                     aria-label={undefined}
+>                                     data-pc-autofocus={undefined}
+>                                     className="p-button p-component p-button-icon-only p-button-text p-button-rounded"
+>                                     disabled={false}
+>                                     onClick={function onClick}
+>                                     data-pc-name="button"
+>                                     data-pc-section="root"
+>                                   >
+                                  ...
+                      ...
+                    ...
+            ...
+          ...
+ 
+[browser] <button> cannot contain a nested <button>.
+See this log for the ancestor stack trace. 
+[browser] In HTML, <button> cannot be a descendant of <button>.
+This will cause a hydration error.
+
+  ...
+    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+      <RedirectBoundary>
+        <RedirectErrorBoundary router={{...}}>
+          <InnerLayoutRouter url="/en/admin/..." tree={[...]} params={{locale:"en"}} cacheNode={{rsc:{...}, ...}} ...>
+            <SegmentViewNode type="page" pagePath="[locale]/a...">
+              <SegmentTrieNode>
+              <MasterDataManagementPage>
+                <MasterDataManagement>
+                  <div className="p-4">
+                    <Toast>
+                    <Toolbar>
+                    <div className="row g-4">
+                      <div className="col-xl-4">
+                        <div className="card borde...">
+                          <div className="card-body">
+                            <div>
+                            <div className="d-flex fle...">
+>                             <button
+>                               type="button"
+>                               className="text-start border rounded-3 p-3 bg-white border-primary shadow-sm"
+>                               onClick={function onClick}
+>                             >
+                                <div>
+                                <div>
+                                <div>
+                                <div className="d-flex gap...">
+                                  <Button icon="pi pi-pencil" text={true} rounded={true} onClick={function onClick}>
+>                                   <button
+>                                     ref={{current:null}}
+>                                     aria-label={undefined}
+>                                     data-pc-autofocus={undefined}
+>                                     className="p-button p-component p-button-icon-only p-button-text p-button-rounded"
+>                                     disabled={false}
+>                                     onClick={function onClick}
+>                                     data-pc-name="button"
+>                                     data-pc-section="root"
+>                                   >
+                                  ...
+                      ...
+                    ...
+            ...
+          ...
+ 
+[browser] <button> cannot contain a nested <button>.
+See this log for the ancestor stack trace. 
+[browser] In HTML, <button> cannot be a descendant of <button>.
+This will cause a hydration error.
+
+  ...
+    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+      <RedirectBoundary>
+        <RedirectErrorBoundary router={{...}}>
+          <InnerLayoutRouter url="/en/admin/..." tree={[...]} params={{locale:"en"}} cacheNode={{rsc:{...}, ...}} ...>
+            <SegmentViewNode type="page" pagePath="[locale]/a...">
+              <SegmentTrieNode>
+              <MasterDataManagementPage>
+                <MasterDataManagement>
+                  <div className="p-4">
+                    <Toast>
+                    <Toolbar>
+                    <div className="row g-4">
+                      <div className="col-xl-4">
+                        <div className="card borde...">
+                          <div className="card-body">
+                            <div>
+                            <div className="d-flex fle...">
+>                             <button
+>                               type="button"
+>                               className="text-start border rounded-3 p-3 bg-white border-primary shadow-sm"
+>                               onClick={function onClick}
+>                             >
+                                <div>
+                                <div>
+                                <div>
+                                <div className="d-flex gap...">
+                                  <Button icon="pi pi-pencil" text={true} rounded={true} onClick={function onClick}>
+>                                   <button
+>                                     ref={{current:null}}
+>                                     aria-label={undefined}
+>                                     data-pc-autofocus={undefined}
+>                                     className="p-button p-component p-button-icon-only p-button-text p-button-rounded"
+>                                     disabled={false}
+>                                     onClick={function onClick}
+>                                     data-pc-name="button"
+>                                     data-pc-section="root"
+>                                   >
+                                  ...
+                      ...
+                    ...
+            ...
+          ...
+ 
+[browser] <button> cannot contain a nested <button>.
+See this log for the ancestor stack trace. 
+⨯ ./src/components/admin/master/MasterDataManagement.tsx:576:17
+Expected '</', got ')'
+  [90m574 |[0m                     </div>
+  [90m575 |[0m                   </button>
+[31m[1m>[0m [90m576 |[0m                 ))}
+  [90m    |[0m                 [31m[1m^[0m
+  [90m577 |[0m                 {projects.length === [35m0[0m && <div className=[32m"text-muted"[0m>[33mNo[0m projects created...
+  [90m578 |[0m               </div>
+  [90m579 |[0m             </div>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./src/components/admin/master/MasterDataManagement.tsx
+    ./src/app/[locale]/admin/master/master-data-management/page.tsx
+
+
+⨯ ./src/components/admin/master/MasterDataManagement.tsx:576:17
+Expected '</', got ')'
+  [90m574 |[0m                     </div>
+  [90m575 |[0m                   </button>
+[31m[1m>[0m [90m576 |[0m                 ))}
+  [90m    |[0m                 [31m[1m^[0m
+  [90m577 |[0m                 {projects.length === [35m0[0m && <div className=[32m"text-muted"[0m>[33mNo[0m projects created...
+  [90m578 |[0m               </div>
+  [90m579 |[0m             </div>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./src/components/admin/master/MasterDataManagement.tsx
+    ./src/app/[locale]/admin/master/master-data-management/page.tsx
+
+
+⨯ ./src/components/admin/master/MasterDataManagement.tsx:576:17
+Expected '</', got ')'
+  [90m574 |[0m                     </div>
+  [90m575 |[0m                   </button>
+[31m[1m>[0m [90m576 |[0m                 ))}
+  [90m    |[0m                 [31m[1m^[0m
+  [90m577 |[0m                 {projects.length === [35m0[0m && <div className=[32m"text-muted"[0m>[33mNo[0m projects created...
+  [90m578 |[0m               </div>
+  [90m579 |[0m             </div>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./src/components/admin/master/MasterDataManagement.tsx
+    ./src/app/[locale]/admin/master/master-data-management/page.tsx
+
+
+⨯ ./src/components/admin/master/MasterDataManagement.tsx:576:17
+Expected '</', got ')'
+  [90m574 |[0m                     </div>
+  [90m575 |[0m                   </button>
+[31m[1m>[0m [90m576 |[0m                 ))}
+  [90m    |[0m                 [31m[1m^[0m
+  [90m577 |[0m                 {projects.length === [35m0[0m && <div className=[32m"text-muted"[0m>[33mNo[0m projects created...
+  [90m578 |[0m               </div>
+  [90m579 |[0m             </div>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./src/components/admin/master/MasterDataManagement.tsx
+    ./src/app/[locale]/admin/master/master-data-management/page.tsx
+
+
+[browser] Uncaught Error: ./src/components/admin/master/MasterDataManagement.tsx:576:17
+Expected '</', got ')'
+  574 |                     </div>
+  575 |                   </button>
+> 576 |                 ))}
+      |                 ^
+  577 |                 {projects.length === 0 && <div className="text-muted">No projects created...
+  578 |               </div>
+  579 |             </div>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./src/components/admin/master/MasterDataManagement.tsx
+    ./src/app/[locale]/admin/master/master-data-management/page.tsx
+
+
+    at <unknown> (Error: ./src/components/admin/master/MasterDataManagement.tsx:576:17)
+    at <unknown> (Error: (./src/components/admin/master/MasterDataManagement.tsx:576:17)
+[browser] Logout API call failed: AxiosError: Request failed with status code 401
+    at async useAuth.useCallback[logout] (src/hooks/useAuth.ts:147:7)
+  145 |   const logout = useCallback(async () => {
+  146 |     try {
+> 147 |       await apiClient.post('/auth/logout');
+      |       ^
+  148 |     } catch (error) {
+  149 |       console.error('Logout API call failed:', error);
+  150 |     } finally { (src/hooks/useAuth.ts:149:15)
+[browser] Image with src "http://localhost:3000/img/icons/icon-sra.svg" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/msme.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/ukpcb.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/digital-india.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Image with src "/img/departments/startup-uk.png" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior

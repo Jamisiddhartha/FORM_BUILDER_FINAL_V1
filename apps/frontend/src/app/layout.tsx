@@ -1,5 +1,6 @@
 // apps/frontend/src/app/layout.tsx
 import Script from "next/script";
+import { Providers } from "./providers";
 
 export const metadata = {
   title: "Single Window Clerance System",
@@ -23,7 +24,9 @@ export default function RootLayout({
         className="sticky-header-inner"
         suppressHydrationWarning
       >
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

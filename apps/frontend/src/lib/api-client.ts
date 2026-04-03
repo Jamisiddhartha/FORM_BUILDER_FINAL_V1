@@ -1,29 +1,26 @@
-
 import axios, { AxiosError, AxiosInstance } from 'axios';
-import { useAuthStore } from '@/store/authStore';
+import { readAccessTokenFromStorage, useAuthStore } from '@/store/authStore';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || '/api',
-  withCredentials: true, // ✅ sends cookies with requests
-  // ❌ Do NOT set a global Content-Type here; let axios/browser decide per request.
+  withCredentials: true,
 });
 
-// Request Interceptor (optional - for logging/debugging)
 apiClient.interceptors.request.use(
   (config) => {
-    // Detect FormData and ensure header isn't forced
+    const accessToken =
+      useAuthStore.getState().accessToken || readAccessTokenFromStorage();
+
+    if (accessToken) {
+      config.headers = config.headers ?? {};
+      (config.headers as any).Authorization = `Bearer ${accessToken}`;
+    }
+
     const isFormData =
       typeof FormData !== 'undefined' && config.data instanceof FormData;
 
-    if (isFormData) {
-      // Remove any pre-set Content-Type to allow multipart boundary
-      if (config.headers) {
-        delete (config.headers as any)['Content-Type'];
-      }
-    } else {
-      // For non-FormData, axios will set application/json automatically when data is an object.
-      // If you want to force JSON, you can uncomment:
-      // config.headers = { ...config.headers, 'Content-Type': 'application/json' };
+    if (isFormData && config.headers) {
+      delete (config.headers as any)['Content-Type'];
     }
 
     if (process.env.NODE_ENV !== 'production') {
@@ -35,29 +32,23 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// Response Interceptor
-let isHandlingUnauth = false; // Prevent multiple redirects
-
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    // Handle 401 Unauthorized (not logged in)
     if (error.response?.status === 401) {
+      useAuthStore.getState().setAccessToken(null);
+
       if (typeof window !== 'undefined') {
         console.log('Unauthorized - redirecting to login');
-        //indow.location.href = '/${locale}/login';
       }
     }
 
-    // Handle 403 Forbidden (wrong role/permission)
-    if (error.response?.status === 403) {
-      if (typeof window !== 'undefined') {
-        console.log('Forbidden - Access denied to resource');
-      }
+    if (error.response?.status === 403 && typeof window !== 'undefined') {
+      console.log('Forbidden - Access denied to resource');
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default apiClient;

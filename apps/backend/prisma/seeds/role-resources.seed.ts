@@ -47,10 +47,11 @@ export async function seedRoleResources(prisma: PrismaClient) {
         'MASTER_DOCUMENT_MASTERS_READ',
         'INVESTOR_DOCUMENTS',
         'INVESTOR_DEPARTMENTAL_SERVICES_APPLY',
+        'MASTER_ALL', // Add master data management access
     ];
 
-    // Department user gets Department Dashboard + Inspector Dashboard
-    const departmentResources = ['DEPARTMENT_DASHBOARD', 'INSPECTOR_DASHBOARD'];
+    // Department user gets Department Dashboard + Inspector Dashboard + Master All
+    const departmentResources = ['DEPARTMENT_DASHBOARD', 'INSPECTOR_DASHBOARD', 'MASTER_ALL'];
 
     // JD gets JD Portal
     const jdResources = ['JD_PORTAL', 'DEPARTMENT_DASHBOARD'];

@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
-import { useAuthStore } from '@/store/authStore';
+import { readAccessTokenFromStorage, useAuthStore } from '@/store/authStore';
 import { useRouter } from '@/navigation';
 import { usePathname } from 'next/navigation';
 import { useLocale } from 'next-intl';
@@ -19,10 +19,12 @@ export function useAuth() {
     user,
     roles,
     resources,
+    accessToken,
     hasFetched,
     setUser,
     setRoles,
     setResources,
+    setAccessToken,
     setLoading,
     setError,
     setHasFetched,
@@ -42,7 +44,6 @@ export function useAuth() {
     pathname?.includes('/incentive-report') ||
     pathname?.includes('/kya');
 
-  // Fetch User Profile Query
   const {
     data: profileData,
     isLoading: isProfileLoading,
@@ -56,35 +57,32 @@ export function useAuth() {
         return response.data;
       } catch (err: any) {
         if (err.response?.status === 401) {
-          // Return an explicit unauthenticated object instead of throwing
-          // This allows React Query to cache the 'logged out' state
-          // and prevents infinite unmount/remount loops from failed fetches
           return { unauthenticated: true };
         }
+
         throw err;
       }
     },
-    staleTime: 10 * 60 * 1000, // 10 minutes cache
+    staleTime: 10 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     retry: false,
     refetchOnWindowFocus: false,
   });
 
-  const isActuallyUnauthorized = profileData?.unauthenticated || (profileAuthError as any)?.response?.status === 401;
+  const isActuallyUnauthorized =
+    profileData?.unauthenticated || (profileAuthError as any)?.response?.status === 401;
 
-  // Fetch Roles Query
   const { data: rolesData, refetch: fetchRolesQuery } = useQuery({
     queryKey: ['auth', 'roles'],
     queryFn: async () => {
       const response = await apiClient.get('/auth/roles');
       return response.data.data || [];
     },
-    staleTime: 60 * 60 * 1000, // 1 hour cache, roles rarely change
+    staleTime: 60 * 60 * 1000,
     retry: 1,
-    enabled: !!profileData && !profileData.unauthenticated, // Only fetch roles if authenticated
+    enabled: !!profileData && !profileData.unauthenticated,
   });
 
-  // Sync Query Data to Zustand Store
   useEffect(() => {
     if (isProfileLoading) {
       setLoading(true);
@@ -111,37 +109,58 @@ export function useAuth() {
       if (profileData.resources) {
         setResources(profileData.resources);
       }
+
       setError(null);
     }
 
     if (rolesData) {
       setRoles(rolesData);
     }
-  }, [profileData, rolesData, isProfileLoading, setUser, setResources, setRoles, setLoading, setError, setHasFetched]);
+  }, [
+    profileData,
+    rolesData,
+    isProfileLoading,
+    setUser,
+    setResources,
+    setRoles,
+    setLoading,
+    setError,
+    setHasFetched,
+  ]);
 
-  // Handle Auth Errors (401 Redirects)
   useEffect(() => {
     if (isProfileError || profileData?.unauthenticated) {
-      // Guard: if the store already has a user from a prior successful fetch,
-      // do NOT clear state — trigger a refetch instead to re-verify.
       const existingUser = useAuthStore.getState().user;
-      if (existingUser) {
+      const activeToken =
+        useAuthStore.getState().accessToken || readAccessTokenFromStorage();
+
+      if (existingUser && activeToken) {
         queryClient.invalidateQueries({ queryKey: ['auth', 'profile'] });
         return;
       }
 
+      setAccessToken(null);
       setUser(null);
       setResources([]);
-
       setError(isActuallyUnauthorized ? 'Not authenticated' : 'Access denied');
 
       if (isActuallyUnauthorized && !isPublicRoute) {
         router.replace('/login');
       }
     }
-  }, [isProfileError, isActuallyUnauthorized, profileData, setUser, setResources, setError, isPublicRoute, router, queryClient]);
+  }, [
+    isProfileError,
+    isActuallyUnauthorized,
+    profileData,
+    setAccessToken,
+    setUser,
+    setResources,
+    setError,
+    isPublicRoute,
+    router,
+    queryClient,
+  ]);
 
-  // Logout Function
   const logout = useCallback(async () => {
     try {
       await apiClient.post('/auth/logout');
@@ -150,6 +169,7 @@ export function useAuth() {
     } finally {
       queryClient.removeQueries({ queryKey: ['auth'] });
       setHasFetched(false);
+      setAccessToken(null);
       setUser(null);
       setRoles([]);
       setResources([]);
@@ -160,44 +180,55 @@ export function useAuth() {
         window.location.href = `/${locale}/login`;
         return;
       }
+
       router.replace('/login');
     }
-  }, [queryClient, setUser, setRoles, setResources, setError, setLoading, setHasFetched, router, locale]);
+  }, [
+    queryClient,
+    setUser,
+    setRoles,
+    setResources,
+    setAccessToken,
+    setError,
+    setLoading,
+    setHasFetched,
+    router,
+    locale,
+  ]);
 
-  // Handle Auto-Logout
-  // Guard: skip auto-logout if the Zustand store already holds a valid user.
-  // This prevents false logouts caused by stale React Query cache returning
-  // { unauthenticated: true } momentarily during client-side navigation.
   useEffect(() => {
-    if (autoLogoutRef.current) return;
+    if (autoLogoutRef.current) {
+      return;
+    }
 
     if (!isProfileLoading && isActuallyUnauthorized && !isPublicRoute) {
-      // If we already have a user in the store (from a previous successful fetch),
-      // do NOT auto-logout — instead trigger a fresh refetch to confirm.
       const existingUser = useAuthStore.getState().user;
-      if (existingUser) {
+      const activeToken =
+        useAuthStore.getState().accessToken || readAccessTokenFromStorage();
+
+      if (existingUser && activeToken) {
         queryClient.invalidateQueries({ queryKey: ['auth', 'profile'] });
         return;
       }
+
       autoLogoutRef.current = true;
       logout();
     }
   }, [isProfileLoading, isActuallyUnauthorized, isPublicRoute, logout, queryClient]);
 
-  // loading stays true until React Query finishes AND the useEffect has
-  // synced profileData into the Zustand store (hasFetched becomes true).
-  // This prevents a brief window where loading=false but user=null.
   const isLoading = isProfileLoading || !hasFetched;
 
   return {
     user,
     roles,
     resources,
+    accessToken,
     loading: isLoading,
     error: isProfileError ? 'Authentication error' : null,
     setUser,
     setRoles,
     setResources,
+    setAccessToken,
     setLoading,
     setError,
     logout,

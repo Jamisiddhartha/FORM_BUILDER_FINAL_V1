@@ -50,3 +50,4 @@ export class CreateMasterDataRecordDto {
   @IsOptional()
   isActive?: boolean;
 }
+

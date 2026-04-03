@@ -4,7 +4,7 @@ import {
   CreateIncentiveApplicationSubmissionDto,
   UpdateIncentiveApplicationSubmissionDto,
 } from './dto';
-import { ApplicationStatus } from '@prisma/client';
+import { ApplicationStatus } from './dto/create-incentive-application-submission.dto';
 
 @Injectable()
 export class IncentiveApplicationSubmissionService {

@@ -22,6 +22,16 @@ import { SkipResourceCheck } from '../../common/skip-resource-check.decorator';
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
+  private getAccessTokenMaxAge() {
+    const expiresInSeconds = Number.parseInt(process.env.JWT_EXPIRATION || '3600', 10);
+
+    if (Number.isFinite(expiresInSeconds) && expiresInSeconds > 0) {
+      return expiresInSeconds * 1000;
+    }
+
+    return 3600000;
+  }
+
   @Public()
   @Post('register')
   async register(@Body() dto: RegisterDto) {
@@ -38,7 +48,7 @@ export class AuthController {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 3600000,
+        maxAge: this.getAccessTokenMaxAge(),
         path: '/',
       });
       return ResponseHelper.success(result.message, result.data);
@@ -83,12 +93,11 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 3600000,
+      maxAge: this.getAccessTokenMaxAge(),
       path: '/',
     });
 
-    const { accessToken, ...userData } = result.data;
-    return ResponseHelper.success(result.message, userData);
+    return ResponseHelper.success(result.message, result.data);
   }
   
   @Public()

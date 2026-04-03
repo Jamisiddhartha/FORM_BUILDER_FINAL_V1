@@ -10,7 +10,7 @@ export default function VerifyEmailPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const token = searchParams.get('token');
-    const { setUser, setResources, fetchRoles } = useAuth();
+    const { setUser, setResources, fetchRoles, setAccessToken } = useAuth();
 
     const [status, setStatus] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
     const [message, setMessage] = useState('Verifying your email...');
@@ -38,14 +38,16 @@ export default function VerifyEmailPage() {
                 setStatus('success');
                 setMessage('Email verified successfully! Redirecting...');
 
-                const { user, profile, resources } = res.data.data;
+                const { accessToken, user, profile, resources } = res.data.data;
 
                 // Clear previous state
+                setAccessToken(null);
                 setUser(null);
                 setResources([]);
                 await new Promise(resolve => setTimeout(resolve, 50));
 
                 // Set new user data
+                setAccessToken(accessToken || null);
                 setUser({
                     id: user.id,
                     email: user.email,

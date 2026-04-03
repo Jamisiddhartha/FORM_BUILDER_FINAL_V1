@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateIncentiveApplicationDocumentDto, UpdateIncentiveApplicationDocumentDto } from './dto';
+import { DocumentStatusCommonIncentive, DocumentApproveStatus } from '@prisma/client';
 
 @Injectable()
 export class IncentiveApplicationDocumentService {
@@ -18,9 +19,9 @@ export class IncentiveApplicationDocumentService {
         size: dto.size,
         remarks: dto.remarks,
         deptRemarks: dto.deptRemarks,
-        status: dto.status || 'Y', // default
+        status: (dto.status || 'Y') as DocumentStatusCommonIncentive, // default
         departmentUserId: dto.departmentUserId,
-        approveStatus: dto.approveStatus || 'PENDING', // default
+        approveStatus: (dto.approveStatus || 'PENDING') as DocumentApproveStatus, // default
         createdBy: dto.createdBy,
       },
     });
@@ -34,12 +35,21 @@ export class IncentiveApplicationDocumentService {
       throw new NotFoundException(`Document with ID ${id} not found`);
     }
 
+    // Build update data with proper type casting for enums
+    const updateData: any = { modifiedOn: new Date() };
+    if (dto.status !== undefined) updateData.status = dto.status as DocumentStatusCommonIncentive;
+    if (dto.approveStatus !== undefined) updateData.approveStatus = dto.approveStatus as DocumentApproveStatus;
+    
+    // Copy other properties
+    Object.keys(dto).forEach(key => {
+      if (!['status', 'approveStatus'].includes(key)) {
+        updateData[key] = dto[key as keyof UpdateIncentiveApplicationDocumentDto];
+      }
+    });
+
     return this.prisma.incentiveApplicationDocument.update({
       where: { id },
-      data: {
-        ...dto,
-        modifiedOn: new Date(),
-      },
+      data: updateData,
     });
   }
 

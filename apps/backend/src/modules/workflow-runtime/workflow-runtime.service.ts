@@ -215,9 +215,9 @@ export class WorkflowRuntimeService {
           unitName: true,
           fieldValue: true,
         },
-      });
+      }) as any[];
       const submissionMap = new Map(
-        submissions.map((item) => [Number(item.submissionId), item]),
+        submissions.map((item: any) => [Number(item.submissionId), item]),
       );
       const now = new Date();
 
@@ -231,10 +231,10 @@ export class WorkflowRuntimeService {
             submissionId: applicationId,
             serviceId: submission?.serviceId || null,
             applicantName: WorkflowRuntimeService.extractTaskApplicantName(
-              submission?.fieldValue,
+              submission?.fieldValue as string | null,
             ),
             companyName: WorkflowRuntimeService.extractTaskCompanyName(
-              submission?.fieldValue,
+              submission?.fieldValue as string | null,
               submission?.unitName || null,
             ),
             currentStep: row.currentStep,
@@ -377,7 +377,7 @@ export class WorkflowRuntimeService {
       where: { id: { in: options.forwardedDeptIds } },
       select: { id: true, name: true },
     });
-    const departmentMap = new Map(
+    const departmentMap: Map<number | bigint, string | null> = new Map(
       departments.map((department) => [department.id, department.name || null]),
     );
 
@@ -385,7 +385,7 @@ export class WorkflowRuntimeService {
       where: { id: { in: roleIds } },
       select: { id: true, name: true },
     });
-    const roleMap = new Map(roles.map((role) => [role.id, role.name || null]));
+    const roleMap: Map<number | bigint, string | null> = new Map(roles.map((role) => [role.id, role.name || null]));
 
     const jurisdictionLevel = String(
       options.jurisdictionLevel || workflowConfig.jurisdictionLevel || '',
@@ -1816,17 +1816,17 @@ export class WorkflowRuntimeService {
     });
     const docIds = Array.from(
       new Set(mappingDocs.map((m) => Number(m.documentsId))).values(),
-    ).filter((id) => Number.isFinite(id) && id > 0);
+    ).filter((id: number) => Number.isFinite(id) && id > 0);
     if (!docIds.length) return true;
 
     const investorDocs = await prisma.investorDocument.findMany({
-      where: { id: { in: docIds.map((id) => BigInt(id)) } },
+      where: { id: { in: docIds.map((id: number) => BigInt(id)) } },
       select: {
         id: true,
         documentStatus: true,
         documentMasterId: true,
       },
-    });
+    }) as any[];
     const docById = new Map(
       investorDocs.map((doc) => [Number(doc.id), doc] as const),
     );
@@ -2044,7 +2044,7 @@ export class WorkflowRuntimeService {
           applicationStatus: true,
           deptId: true,
         },
-      });
+      }) as any[];
       const submissionMap = new Map(
         submissions.map((submission) => [
           Number(submission.submissionId),
@@ -2061,8 +2061,14 @@ export class WorkflowRuntimeService {
           updatedAt: true,
         },
         orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-      });
-      const workflowMap = new Map(
+      }) as Array<{
+        applicationId: bigint;
+        currentStep: number;
+        currentRoleId: number;
+        dueAt: Date | null;
+        updatedAt: Date;
+      }>;
+      const workflowMap: Map<number, typeof workflowRows[0]> = new Map(
         workflowRows.map((row) => [Number(row.applicationId), row]),
       );
       const serviceIds = Array.from(
@@ -2235,8 +2241,8 @@ export class WorkflowRuntimeService {
         applicationUpdatedDateTime: true,
         deptId: true,
       },
-    });
-    const submissionMap = new Map(
+    }) as any[];
+    const submissionMap: Map<number, typeof submissions[0]> = new Map(
       submissions.map((submission) => [Number(submission.submissionId), submission]),
     );
     const filteredRowsRaw = workflowRows.map((workflowRow) => {
@@ -2347,7 +2353,7 @@ export class WorkflowRuntimeService {
         slaBreached: Boolean(dueAt && new Date() > dueAt),
         status: row.submission.applicationStatus,
         statusLabel: WorkflowRuntimeService.getFriendlyStatus(
-          row.submission.applicationStatus,
+          row.submission.applicationStatus || undefined,
         ),
         actionUrl: this.resolveWorkflowActionUrlByRole(
           Number(options.userRoleId),
@@ -3499,9 +3505,9 @@ export class WorkflowRuntimeService {
               new Set(
                 (narrowedTargets.length ? narrowedTargets : explicitTargets)
                   .map((target) => buildForwardedLabel(target))
-                  .filter(Boolean),
+                  .filter((label): label is string => Boolean(label)),
               ),
-            ).sort((a, b) => a.localeCompare(b));
+            ).sort((a: string, b: string) => a.localeCompare(b));
             if (labels.length) return labels.join(', ');
           }
           const nextRoleId = Number(item.nextRoleId || 0);
@@ -3602,12 +3608,12 @@ export class WorkflowRuntimeService {
         documentPath: true,
         createdAt: true,
       },
-    });
+    }) as any[];
     const masterIds = Array.from(
-      new Set(investorDocs.map((d) => d.documentMasterId)),
+      new Set(investorDocs.map((d) => d.documentMasterId).filter((id) => id !== null)),
     );
     const masters = await this.prisma.documentMaster.findMany({
-      where: { id: { in: masterIds } },
+      where: { id: { in: masterIds as any } },
       select: {
         id: true,
         checklistId: true,
@@ -3616,7 +3622,7 @@ export class WorkflowRuntimeService {
           select: { name: true },
         },
       },
-    });
+    }) as any[];
     const masterMap = new Map(masters.map((m) => [m.id, m]));
     const docMap = new Map(investorDocs.map((d) => [Number(d.id), d]));
     const requiredDocIds = await this.getRequiredDocumentIdsForService(

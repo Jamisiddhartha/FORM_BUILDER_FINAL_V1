@@ -35,9 +35,194 @@ type DefinitionRecordRow = {
   updated_at: string;
 };
 
+type MasterDefinitionV2Row = {
+  id: number;
+  tenantId: number;
+  projectId: number | null;
+  name: string;
+  code: string;
+  description: string | null;
+  icon: string | null;
+  isActive: boolean;
+  isSystem: boolean;
+  allowImport: boolean;
+  displayOrder: number;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  masterDataCount: number;
+};
+
+type MasterColumnDefinitionV2Row = {
+  id: number;
+  masterId: number;
+  columnKey: string;
+  columnLabel: string;
+  dataType: string;
+  isRequired: boolean;
+  isUnique: boolean;
+  isSearchable: boolean;
+  isListable: boolean;
+  isFilterable: boolean;
+  displayOrder: number;
+  options: Record<string, any> | null;
+  validation: Record<string, any> | null;
+  defaultValue: string | null;
+  placeholder: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MasterDataEntryV2Row = {
+  id: string;
+  masterId: number;
+  tenantId: number;
+  data: Record<string, any>;
+  isActive: boolean;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type MasterDataReferenceV2Row = {
+  id: string;
+  fromDataId: string;
+  toDataId: string;
+  columnKey: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 @Injectable()
 export class MasterDataManagementService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private normalizeMasterDataEnvelope(
+    dto: any,
+    existingData: Record<string, any> = {},
+  ) {
+    const nextValidFrom = dto.valid_from;
+    const nextValidTo = dto.valid_to;
+
+    if (nextValidFrom && nextValidTo && new Date(nextValidFrom) > new Date(nextValidTo)) {
+      throw new BadRequestException('Valid From cannot be later than Valid To');
+    }
+
+    const normalizedData = {
+      ...existingData,
+      ...(dto.data || {}),
+    };
+
+    if (dto.valid_from !== undefined) {
+      normalizedData.valid_from = dto.valid_from || null;
+    }
+
+    if (dto.valid_to !== undefined) {
+      normalizedData.valid_to = dto.valid_to || null;
+    }
+
+    if (dto.sort_order !== undefined) {
+      const parsedSortOrder = Number(dto.sort_order);
+      normalizedData.sort_order =
+        dto.sort_order === null || dto.sort_order === ''
+          ? 0
+          : Number.isFinite(parsedSortOrder)
+            ? parsedSortOrder
+            : 0;
+    }
+
+    if (dto.is_active !== undefined) {
+      normalizedData.is_active = dto.is_active;
+    }
+
+    return {
+      data: normalizedData,
+      isActive: dto.is_active ?? dto.isActive,
+    };
+  }
+
+  async getTenants() {
+    return this.prisma.$queryRawUnsafe<any[]>(`
+      SELECT
+        t.id,
+        t.name,
+        t.slug,
+        t.domain,
+        t.logo_url AS "logoUrl",
+        t.primary_color AS "primaryColor",
+        t.plan,
+        t.settings,
+        t.is_active AS "isActive",
+        t.created_at AS "createdAt",
+        t.updated_at AS "updatedAt",
+        COUNT(DISTINCT tp.id)::int AS "projectCount",
+        COUNT(DISTINCT md.id)::int AS "masterDefinitionCount"
+      FROM public."tenants" t
+      LEFT JOIN public."tenant_projects" tp
+        ON tp.tenant_id = t.id
+      LEFT JOIN mdm_industrial_approvals."mdm_master_definitions_v2" md
+        ON md.tenant_id = t.id
+      GROUP BY
+        t.id,
+        t.name,
+        t.slug,
+        t.domain,
+        t.logo_url,
+        t.primary_color,
+        t.plan,
+        t.settings,
+        t.is_active,
+        t.created_at,
+        t.updated_at
+      ORDER BY t.is_active DESC, t.name ASC
+    `);
+  }
+
+  async getTenantProjects(tenantId?: number) {
+    const whereClause = tenantId ? `WHERE tp.tenant_id = ${Number(tenantId)}` : '';
+
+    return this.prisma.$queryRawUnsafe<any[]>(`
+      SELECT
+        tp.id,
+        tp.tenant_id AS "tenantId",
+        tp.name,
+        tp.code,
+        tp.description,
+        tp.start_date AS "startDate",
+        tp.end_date AS "endDate",
+        tp.is_active AS "isActive",
+        tp.created_at AS "createdAt",
+        tp.updated_at AS "updatedAt",
+        json_build_object(
+          'id', t.id,
+          'name', t.name,
+          'slug', t.slug
+        ) AS tenant,
+        COUNT(DISTINCT md.id)::int AS "masterDefinitionCount"
+      FROM public."tenant_projects" tp
+      INNER JOIN public."tenants" t
+        ON t.id = tp.tenant_id
+      LEFT JOIN mdm_industrial_approvals."mdm_master_definitions_v2" md
+        ON md.project_id = tp.id
+      ${whereClause}
+      GROUP BY
+        tp.id,
+        tp.tenant_id,
+        tp.name,
+        tp.code,
+        tp.description,
+        tp.start_date,
+        tp.end_date,
+        tp.is_active,
+        tp.created_at,
+        tp.updated_at,
+        t.id,
+        t.name,
+        t.slug
+      ORDER BY tp.is_active DESC, tp.name ASC
+    `);
+  }
 
   async getProjects() {
     const projects = await this.prisma.masterDataProject.findMany({
@@ -71,7 +256,7 @@ export class MasterDataManagementService {
         code: normalizedCode,
         description: dto.description?.trim() || null,
         schemaName,
-        isActive: dto.isActive ?? true,
+        isActive: dto.isActive !== undefined ? dto.isActive : true,
       },
     });
   }
@@ -122,7 +307,7 @@ export class MasterDataManagementService {
         departmentId: dto.departmentId,
         name: dto.name.trim(),
         code,
-        isActive: dto.isActive ?? true,
+        isActive: dto.isActive !== undefined ? dto.isActive : true,
       },
       include: {
         department: {
@@ -250,7 +435,7 @@ export class MasterDataManagementService {
           default_order_by: '"sort_order" ASC, "name" ASC',
           parent_column: 'parent_id',
           api_endpoint: `/master/master-tables/${masterCode}/options`,
-          is_active: dto.isActive ?? true,
+          is_active: dto.isActive !== undefined ? dto.isActive : true,
           created_by: createdBy,
         },
       });
@@ -272,7 +457,7 @@ export class MasterDataManagementService {
           validFrom: dto.validFrom ? new Date(dto.validFrom) : null,
           validTo: dto.validTo ? new Date(dto.validTo) : null,
           masterTableId: masterTable.id,
-          isActive: dto.isActive ?? true,
+          isActive: dto.isActive !== undefined ? dto.isActive : true,
           createdBy,
         },
         include: {
@@ -448,7 +633,7 @@ export class MasterDataManagementService {
         : null,
       dto.sortOrder ?? 0,
       dto.metadata || {},
-      dto.isActive ?? true,
+      dto.isActive !== undefined ? dto.isActive : true,
     );
 
     return rows[0];
@@ -520,7 +705,7 @@ export class MasterDataManagementService {
         : null,
       payload.sortOrder ?? 0,
       payload.metadata || {},
-      payload.isActive ?? true,
+      payload.isActive !== undefined ? payload.isActive : true,
       recordId,
     );
 
@@ -676,6 +861,123 @@ export class MasterDataManagementService {
     }
 
     return definition;
+  }
+
+  private async ensureTenantExists(id: number) {
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ id: number }>>(
+      `SELECT id FROM public."tenants" WHERE id = $1 LIMIT 1`,
+      id,
+    );
+
+    if (!rows[0]) {
+      throw new BadRequestException(`Tenant ${id} not found`);
+    }
+  }
+
+  private async ensureTenantProjectExists(id: number) {
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ id: number; tenantId: number }>>(
+      `
+        SELECT
+          id,
+          tenant_id AS "tenantId"
+        FROM public."tenant_projects"
+        WHERE id = $1
+        LIMIT 1
+      `,
+      id,
+    );
+    const project = rows[0];
+
+    if (!project) {
+      throw new BadRequestException(`Tenant project ${id} not found`);
+    }
+
+    return project;
+  }
+
+  private async validateTenantProject(tenantId: number, projectId?: number | null) {
+    await this.ensureTenantExists(tenantId);
+
+    if (!projectId) {
+      return null;
+    }
+
+    const project = await this.ensureTenantProjectExists(projectId);
+
+    if (project.tenantId !== tenantId) {
+      throw new BadRequestException(
+        'Selected tenant project does not belong to the selected tenant',
+      );
+    }
+
+    return project;
+  }
+
+  private async enrichMasterDefinitions<T extends { tenantId: number; projectId?: number | null }>(
+    definitions: T[],
+  ) {
+    if (!definitions.length) {
+      return definitions;
+    }
+
+    const tenantIds = [...new Set(definitions.map((definition) => definition.tenantId))];
+    const projectIds = [
+      ...new Set(
+        definitions
+          .map((definition) => definition.projectId)
+          .filter((projectId): projectId is number => Number.isInteger(projectId)),
+      ),
+    ];
+
+    const tenantMap = new Map<number, { id: number; name: string; slug: string }>();
+    const projectMap = new Map<
+      number,
+      { id: number; tenantId: number; name: string; code: string; isActive: boolean }
+    >();
+
+    if (tenantIds.length) {
+      const tenantRows = await this.prisma.$queryRawUnsafe<Array<{ id: number; name: string; slug: string }>>(
+        `
+          SELECT id, name, slug
+          FROM public."tenants"
+          WHERE id IN (${tenantIds.join(',')})
+        `,
+      );
+
+      tenantRows.forEach((tenant) => {
+        tenantMap.set(tenant.id, tenant);
+      });
+    }
+
+    if (projectIds.length) {
+      const projectRows = await this.prisma.$queryRawUnsafe<
+        Array<{ id: number; tenantId: number; name: string; code: string; isActive: boolean }>
+      >(
+        `
+          SELECT
+            id,
+            tenant_id AS "tenantId",
+            name,
+            code,
+            is_active AS "isActive"
+          FROM public."tenant_projects"
+          WHERE id IN (${projectIds.join(',')})
+        `,
+      );
+
+      projectRows.forEach((project) => {
+        projectMap.set(project.id, project);
+      });
+    }
+
+    return definitions.map((definition) => ({
+      ...definition,
+      tenant: tenantMap.get(definition.tenantId) ?? null,
+      project:
+        definition.projectId && projectMap.has(definition.projectId)
+          ? projectMap.get(definition.projectId) ?? null
+          : null,
+    }));
   }
 
   private async ensureDepartmentExists(id: number) {
@@ -962,6 +1264,922 @@ export class MasterDataManagementService {
 
     const rows = await this.prisma.$queryRawUnsafe<any[]>(query, id);
     return rows[0] || null;
+  }
+
+  private toSqlNumberList(values: Array<number | string | bigint>) {
+    const normalized = values
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0);
+
+    if (!normalized.length) {
+      return '';
+    }
+
+    for (const value of normalized) {
+      if (!/^-?\d+$/.test(value)) {
+        throw new BadRequestException(`Invalid numeric identifier "${value}"`);
+      }
+    }
+
+    return normalized.join(', ');
+  }
+
+  private async queryMasterDefinitionV2Rows(filters?: {
+    id?: number;
+    tenantId?: number;
+    projectId?: number;
+    isActive?: boolean;
+  }) {
+    const clauses: string[] = [];
+    const params: Array<number | boolean> = [];
+
+    if (filters?.id !== undefined) {
+      params.push(filters.id);
+      clauses.push(`md.id = $${params.length}`);
+    }
+
+    if (filters?.tenantId !== undefined) {
+      params.push(filters.tenantId);
+      clauses.push(`md.tenant_id = $${params.length}`);
+    }
+
+    if (filters?.projectId !== undefined) {
+      params.push(filters.projectId);
+      clauses.push(`md.project_id = $${params.length}`);
+    }
+
+    if (filters?.isActive !== undefined) {
+      params.push(filters.isActive);
+      clauses.push(`md.is_active = $${params.length}`);
+    }
+
+    const whereClause = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+
+    return this.prisma.$queryRawUnsafe<Array<MasterDefinitionV2Row>>(
+      `
+        SELECT
+          md.id,
+          md.tenant_id AS "tenantId",
+          md.project_id AS "projectId",
+          md.name,
+          md.code,
+          md.description,
+          md.icon,
+          md.is_active AS "isActive",
+          md.is_system AS "isSystem",
+          md.allow_import AS "allowImport",
+          md.display_order AS "displayOrder",
+          md.created_by AS "createdBy",
+          md.created_at AS "createdAt",
+          md.updated_at AS "updatedAt",
+          COALESCE(data_counts.count, 0)::int AS "masterDataCount"
+        FROM mdm_industrial_approvals."mdm_master_definitions_v2" md
+        LEFT JOIN (
+          SELECT
+            master_id,
+            COUNT(*)::int AS count
+          FROM mdm_industrial_approvals."mdm_master_data"
+          GROUP BY master_id
+        ) data_counts
+          ON data_counts.master_id = md.id
+        ${whereClause}
+        ORDER BY md.display_order ASC, md.name ASC, md.id ASC
+      `,
+      ...params,
+    );
+  }
+
+  private async queryMasterColumnDefinitionsV2ByMasterIds(masterIds: number[]) {
+    if (!masterIds.length) {
+      return [] as MasterColumnDefinitionV2Row[];
+    }
+
+    const idList = this.toSqlNumberList(masterIds);
+
+    return this.prisma.$queryRawUnsafe<Array<MasterColumnDefinitionV2Row>>(
+      `
+        SELECT
+          id,
+          master_id AS "masterId",
+          column_key AS "columnKey",
+          column_label AS "columnLabel",
+          data_type::text AS "dataType",
+          is_required AS "isRequired",
+          is_unique AS "isUnique",
+          is_searchable AS "isSearchable",
+          is_listable AS "isListable",
+          is_filterable AS "isFilterable",
+          display_order AS "displayOrder",
+          options,
+          validation,
+          default_value AS "defaultValue",
+          placeholder,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM mdm_industrial_approvals."mdm_master_column_definitions"
+        WHERE master_id IN (${idList})
+        ORDER BY display_order ASC, id ASC
+      `,
+    );
+  }
+
+  private async queryMasterColumnDefinitionV2ById(columnId: number) {
+    const rows = await this.prisma.$queryRawUnsafe<Array<MasterColumnDefinitionV2Row>>(
+      `
+        SELECT
+          id,
+          master_id AS "masterId",
+          column_key AS "columnKey",
+          column_label AS "columnLabel",
+          data_type::text AS "dataType",
+          is_required AS "isRequired",
+          is_unique AS "isUnique",
+          is_searchable AS "isSearchable",
+          is_listable AS "isListable",
+          is_filterable AS "isFilterable",
+          display_order AS "displayOrder",
+          options,
+          validation,
+          default_value AS "defaultValue",
+          placeholder,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM mdm_industrial_approvals."mdm_master_column_definitions"
+        WHERE id = $1
+        LIMIT 1
+      `,
+      columnId,
+    );
+
+    return rows[0] ?? null;
+  }
+
+  private async queryMasterDataEntriesV2(filters: {
+    ids?: Array<string | bigint>;
+    masterId?: number;
+    tenantId?: number;
+    isActive?: boolean;
+    limit?: number;
+  }) {
+    const clauses: string[] = [];
+    const params: Array<number | boolean> = [];
+
+    if (filters.ids?.length) {
+      clauses.push(`md.id IN (${this.toSqlNumberList(filters.ids)})`);
+    }
+
+    if (filters.masterId !== undefined) {
+      params.push(filters.masterId);
+      clauses.push(`md.master_id = $${params.length}`);
+    }
+
+    if (filters.tenantId !== undefined) {
+      params.push(filters.tenantId);
+      clauses.push(`md.tenant_id = $${params.length}`);
+    }
+
+    if (filters.isActive !== undefined) {
+      params.push(filters.isActive);
+      clauses.push(`md.is_active = $${params.length}`);
+    }
+
+    const whereClause = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    const limitClause =
+      filters.limit !== undefined && Number.isFinite(filters.limit)
+        ? `LIMIT ${Math.max(1, Number(filters.limit))}`
+        : '';
+
+    return this.prisma.$queryRawUnsafe<Array<MasterDataEntryV2Row>>(
+      `
+        SELECT
+          md.id::text AS id,
+          md.master_id AS "masterId",
+          md.tenant_id AS "tenantId",
+          md.data,
+          md.is_active AS "isActive",
+          md.created_by AS "createdBy",
+          md.updated_by AS "updatedBy",
+          md.created_at AS "createdAt",
+          md.updated_at AS "updatedAt"
+        FROM mdm_industrial_approvals."mdm_master_data" md
+        ${whereClause}
+        ORDER BY md.created_at DESC, md.id DESC
+        ${limitClause}
+      `,
+      ...params,
+    );
+  }
+
+  private async queryMasterDataEntryV2ById(id: bigint | string) {
+    const rows = await this.queryMasterDataEntriesV2({ ids: [id], limit: 1 });
+    return rows[0] ?? null;
+  }
+
+  private async queryMasterDataReferencesV2(dataIds: Array<string | bigint>) {
+    if (!dataIds.length) {
+      return [] as MasterDataReferenceV2Row[];
+    }
+
+    const idList = this.toSqlNumberList(dataIds);
+
+    return this.prisma.$queryRawUnsafe<Array<MasterDataReferenceV2Row>>(
+      `
+        SELECT
+          id::text AS id,
+          from_data_id::text AS "fromDataId",
+          to_data_id::text AS "toDataId",
+          column_key AS "columnKey",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM mdm_industrial_approvals."mdm_master_data_references"
+        WHERE from_data_id IN (${idList})
+           OR to_data_id IN (${idList})
+        ORDER BY created_at DESC, id DESC
+      `,
+    );
+  }
+
+  private async enrichMasterDataReferences(references: MasterDataReferenceV2Row[]) {
+    if (!references.length) {
+      return references;
+    }
+
+    const relatedIds = [
+      ...new Set(
+        references.flatMap((reference) => [reference.fromDataId, reference.toDataId]),
+      ),
+    ];
+    const relatedEntries = await this.queryMasterDataEntriesV2({ ids: relatedIds });
+    const relatedEntryMap = new Map(relatedEntries.map((entry) => [entry.id, entry]));
+
+    return references.map((reference) => ({
+      ...reference,
+      fromData: relatedEntryMap.get(reference.fromDataId) ?? null,
+      toData: relatedEntryMap.get(reference.toDataId) ?? null,
+    }));
+  }
+
+  private async attachReferencesToMasterData<T extends MasterDataEntryV2Row>(entries: T[]) {
+    if (!entries.length) {
+      return entries;
+    }
+
+    const references = await this.enrichMasterDataReferences(
+      await this.queryMasterDataReferencesV2(entries.map((entry) => entry.id)),
+    );
+
+    const fromMap = new Map<string, any[]>();
+    const toMap = new Map<string, any[]>();
+
+    for (const reference of references) {
+      fromMap.set(reference.fromDataId, [...(fromMap.get(reference.fromDataId) ?? []), reference]);
+      toMap.set(reference.toDataId, [...(toMap.get(reference.toDataId) ?? []), reference]);
+    }
+
+    return entries.map((entry) => ({
+      ...entry,
+      referencesFrom: fromMap.get(entry.id) ?? [],
+      referencesTo: toMap.get(entry.id) ?? [],
+    }));
+  }
+
+  // ========== MASTER DATA MANAGEMENT V2 METHODS ==========
+
+  /**
+   * Create a new master definition in the mdm_industrial_approvals schema
+   */
+  async createMasterDefinitionV2(
+    dto: any, // CreateMasterDefinitionV2Dto
+    createdBy: string,
+  ) {
+    await this.validateTenantProject(dto.tenantId, dto.projectId ?? null);
+
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ id: number }>>(
+      `
+        INSERT INTO mdm_industrial_approvals."mdm_master_definitions_v2" (
+          tenant_id,
+          project_id,
+          name,
+          code,
+          description,
+          icon,
+          is_active,
+          is_system,
+          allow_import,
+          display_order,
+          created_by,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+        RETURNING id
+      `,
+      dto.tenantId,
+      dto.projectId || null,
+      dto.name.trim(),
+      this.normalizeBusinessCode(dto.code),
+      dto.description?.trim() || null,
+      dto.icon?.trim() || null,
+      dto.isActive !== undefined ? dto.isActive : true,
+      dto.isSystem || false,
+      dto.allowImport !== undefined ? dto.allowImport : true,
+      dto.displayOrder || 0,
+      createdBy,
+    );
+
+    return this.getMasterDefinitionV2(rows[0].id);
+  }
+
+  /**
+   * Get all master definitions with optional filtering
+   */
+  async getMasterDefinitionsV2(filters?: {
+    tenantId?: number;
+    projectId?: number;
+    isActive?: boolean;
+  }) {
+    const rows = await this.queryMasterDefinitionV2Rows(filters);
+    const columns = await this.queryMasterColumnDefinitionsV2ByMasterIds(rows.map((row) => row.id));
+    const columnsByMasterId = new Map<number, MasterColumnDefinitionV2Row[]>();
+
+    for (const column of columns) {
+      columnsByMasterId.set(column.masterId, [
+        ...(columnsByMasterId.get(column.masterId) ?? []),
+        column,
+      ]);
+    }
+
+    const definitions = rows.map(({ masterDataCount, ...row }) => ({
+      ...row,
+      columnDefinitions: columnsByMasterId.get(row.id) ?? [],
+      _count: {
+        masterData: masterDataCount,
+      },
+    }));
+
+    return this.enrichMasterDefinitions(definitions);
+  }
+
+  /**
+   * Get a single master definition by ID
+   */
+  async getMasterDefinitionV2(id: number) {
+    const rows = await this.queryMasterDefinitionV2Rows({ id });
+    const row = rows[0];
+
+    if (!row) {
+      throw new NotFoundException(`Master definition with ID ${id} not found`);
+    }
+
+    const [columns, recentMasterData] = await Promise.all([
+      this.queryMasterColumnDefinitionsV2ByMasterIds([id]),
+      this.attachReferencesToMasterData(
+        await this.queryMasterDataEntriesV2({
+          masterId: id,
+          limit: 10,
+        }),
+      ),
+    ]);
+
+    const definition = {
+      ...row,
+      columnDefinitions: columns,
+      masterData: recentMasterData,
+      _count: {
+        masterData: row.masterDataCount,
+      },
+    };
+
+    const [enrichedDefinition] = await this.enrichMasterDefinitions([definition]);
+    return enrichedDefinition;
+  }
+
+  /**
+   * Update a master definition
+   */
+  async updateMasterDefinitionV2(id: number, dto: any) {
+    const existingDefinition = await this.getMasterDefinitionV2(id);
+
+    if (dto.projectId !== undefined) {
+      await this.validateTenantProject(existingDefinition.tenantId, dto.projectId);
+    }
+
+    await this.prisma.$queryRawUnsafe(
+      `
+        UPDATE mdm_industrial_approvals."mdm_master_definitions_v2"
+        SET
+          project_id = $1,
+          name = $2,
+          description = $3,
+          icon = $4,
+          is_active = $5,
+          is_system = $6,
+          allow_import = $7,
+          display_order = $8,
+          updated_at = NOW()
+        WHERE id = $9
+      `,
+      dto.projectId === undefined ? existingDefinition.projectId ?? null : dto.projectId || null,
+      dto.name === undefined ? existingDefinition.name : dto.name.trim(),
+      dto.description === undefined
+        ? existingDefinition.description ?? null
+        : dto.description?.trim() || null,
+      dto.icon === undefined ? existingDefinition.icon ?? null : dto.icon?.trim() || null,
+      dto.isActive === undefined ? existingDefinition.isActive : dto.isActive,
+      dto.isSystem === undefined ? existingDefinition.isSystem : dto.isSystem,
+      dto.allowImport === undefined ? existingDefinition.allowImport : dto.allowImport,
+      dto.displayOrder === undefined ? existingDefinition.displayOrder : dto.displayOrder,
+      id,
+    );
+
+    return this.getMasterDefinitionV2(id);
+  }
+
+  /**
+   * Delete a master definition and all related data
+   */
+  async deleteMasterDefinitionV2(id: number) {
+    await this.getMasterDefinitionV2(id); // Verify exists
+
+    await this.prisma.$queryRawUnsafe(
+      `
+        DELETE FROM mdm_industrial_approvals."mdm_master_definitions_v2"
+        WHERE id = $1
+      `,
+      id,
+    );
+
+    return { success: true };
+  }
+
+  /**
+   * Create column definitions for a master
+   */
+  async createMasterColumnDefinitionsV2(
+    masterId: number,
+    dtos: any[], // CreateMasterColumnDefinitionDto[]
+  ) {
+    await this.getMasterDefinitionV2(masterId); // Verify master exists
+
+    const created: MasterColumnDefinitionV2Row[] = [];
+
+    for (const dto of dtos) {
+      const rows = await this.prisma.$queryRawUnsafe<Array<MasterColumnDefinitionV2Row>>(
+        `
+          INSERT INTO mdm_industrial_approvals."mdm_master_column_definitions" (
+            master_id,
+            column_key,
+            column_label,
+            data_type,
+            is_required,
+            is_unique,
+            is_searchable,
+            is_listable,
+            is_filterable,
+            display_order,
+            options,
+            validation,
+            default_value,
+            placeholder,
+            updated_at
+          )
+          VALUES (
+            $1,
+            $2,
+            $3,
+            $4::mdm_industrial_approvals."ColumnDataType",
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11::jsonb,
+            $12::jsonb,
+            $13,
+            $14,
+            NOW()
+          )
+          RETURNING
+            id,
+            master_id AS "masterId",
+            column_key AS "columnKey",
+            column_label AS "columnLabel",
+            data_type::text AS "dataType",
+            is_required AS "isRequired",
+            is_unique AS "isUnique",
+            is_searchable AS "isSearchable",
+            is_listable AS "isListable",
+            is_filterable AS "isFilterable",
+            display_order AS "displayOrder",
+            options,
+            validation,
+            default_value AS "defaultValue",
+            placeholder,
+            created_at AS "createdAt",
+            updated_at AS "updatedAt"
+        `,
+        masterId,
+        this.toIdentifier(dto.columnKey),
+        dto.columnLabel,
+        dto.dataType,
+        dto.isRequired || false,
+        dto.isUnique || false,
+        dto.isSearchable !== false,
+        dto.isListable !== false,
+        dto.isFilterable !== false,
+        dto.displayOrder || 0,
+        dto.options ? JSON.stringify(dto.options) : null,
+        dto.validation ? JSON.stringify(dto.validation) : null,
+        dto.defaultValue || null,
+        dto.placeholder || null,
+      );
+
+      created.push(rows[0]);
+    }
+
+    return created;
+  }
+
+  /**
+   * Get column definitions for a master
+   */
+  async getMasterColumnDefinitionsV2(masterId: number) {
+    await this.getMasterDefinitionV2(masterId); // Verify master exists
+    return this.queryMasterColumnDefinitionsV2ByMasterIds([masterId]);
+  }
+
+  /**
+   * Update a column definition
+   */
+  async updateMasterColumnDefinitionV2(columnId: number, dto: any) {
+    const column = await this.queryMasterColumnDefinitionV2ById(columnId);
+
+    if (!column) {
+      throw new NotFoundException(`Column definition with ID ${columnId} not found`);
+    }
+
+    const rows = await this.prisma.$queryRawUnsafe<Array<MasterColumnDefinitionV2Row>>(
+      `
+        UPDATE mdm_industrial_approvals."mdm_master_column_definitions"
+        SET
+          column_label = $1,
+          is_required = $2,
+          is_unique = $3,
+          is_searchable = $4,
+          is_listable = $5,
+          is_filterable = $6,
+          display_order = $7,
+          options = $8::jsonb,
+          validation = $9::jsonb,
+          default_value = $10,
+          placeholder = $11,
+          updated_at = NOW()
+        WHERE id = $12
+        RETURNING
+          id,
+          master_id AS "masterId",
+          column_key AS "columnKey",
+          column_label AS "columnLabel",
+          data_type::text AS "dataType",
+          is_required AS "isRequired",
+          is_unique AS "isUnique",
+          is_searchable AS "isSearchable",
+          is_listable AS "isListable",
+          is_filterable AS "isFilterable",
+          display_order AS "displayOrder",
+          options,
+          validation,
+          default_value AS "defaultValue",
+          placeholder,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+      `,
+      dto.columnLabel === undefined ? column.columnLabel : dto.columnLabel,
+      dto.isRequired === undefined ? column.isRequired : dto.isRequired,
+      dto.isUnique === undefined ? column.isUnique : dto.isUnique,
+      dto.isSearchable === undefined ? column.isSearchable : dto.isSearchable,
+      dto.isListable === undefined ? column.isListable : dto.isListable,
+      dto.isFilterable === undefined ? column.isFilterable : dto.isFilterable,
+      dto.displayOrder === undefined ? column.displayOrder : dto.displayOrder,
+      dto.options === undefined
+        ? column.options
+          ? JSON.stringify(column.options)
+          : null
+        : dto.options
+          ? JSON.stringify(dto.options)
+          : null,
+      dto.validation === undefined
+        ? column.validation
+          ? JSON.stringify(column.validation)
+          : null
+        : dto.validation
+          ? JSON.stringify(dto.validation)
+          : null,
+      dto.defaultValue === undefined ? column.defaultValue ?? null : dto.defaultValue || null,
+      dto.placeholder === undefined ? column.placeholder ?? null : dto.placeholder || null,
+      columnId,
+    );
+
+    return rows[0];
+  }
+
+  /**
+   * Delete a column definition
+   */
+  async deleteMasterColumnDefinitionV2(columnId: number) {
+    const column = await this.queryMasterColumnDefinitionV2ById(columnId);
+
+    if (!column) {
+      throw new NotFoundException(`Column definition with ID ${columnId} not found`);
+    }
+
+    await this.prisma.$queryRawUnsafe(
+      `
+        DELETE FROM mdm_industrial_approvals."mdm_master_column_definitions"
+        WHERE id = $1
+      `,
+      columnId,
+    );
+
+    return { success: true };
+  }
+
+  /**
+   * Create master data
+   */
+  async createMasterDataV2(dto: any) {
+    const definition = await this.getMasterDefinitionV2(dto.masterId);
+    await this.ensureTenantExists(dto.tenantId);
+
+    if (definition.tenantId !== dto.tenantId) {
+      throw new BadRequestException('Selected tenant does not match the master definition tenant');
+    }
+
+    const normalized = this.normalizeMasterDataEnvelope(dto);
+
+    const rows = await this.prisma.$queryRawUnsafe<Array<MasterDataEntryV2Row>>(
+      `
+        INSERT INTO mdm_industrial_approvals."mdm_master_data" (
+          master_id,
+          tenant_id,
+          data,
+          is_active,
+          created_by,
+          updated_at
+        )
+        VALUES ($1, $2, $3::jsonb, $4, $5, NOW())
+        RETURNING
+          id::text AS id,
+          master_id AS "masterId",
+          tenant_id AS "tenantId",
+          data,
+          is_active AS "isActive",
+          created_by AS "createdBy",
+          updated_by AS "updatedBy",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+      `,
+      dto.masterId,
+      dto.tenantId,
+      JSON.stringify(normalized.data),
+      normalized.isActive !== undefined ? normalized.isActive : true,
+      dto.createdBy || null,
+    );
+
+    const [entry] = await this.attachReferencesToMasterData(rows);
+    return entry;
+  }
+
+  /**
+   * Get master data with references
+   */
+  async getMasterDataV2(masterId: number, filters?: { tenantId?: number; isActive?: boolean }) {
+    await this.getMasterDefinitionV2(masterId); // Verify master exists
+    return this.attachReferencesToMasterData(
+      await this.queryMasterDataEntriesV2({
+        masterId,
+        tenantId: filters?.tenantId,
+        isActive: filters?.isActive,
+      }),
+    );
+  }
+
+  /**
+   * Get single master data entry
+   */
+  async getMasterDataEntryV2(id: bigint) {
+    const entry = await this.queryMasterDataEntryV2ById(id);
+
+    if (!entry) {
+      throw new NotFoundException(`Master data entry with ID ${id} not found`);
+    }
+
+    const [definitionRow] = await this.queryMasterDefinitionV2Rows({ id: entry.masterId });
+    const [columns, [entryWithReferences]] = await Promise.all([
+      this.queryMasterColumnDefinitionsV2ByMasterIds([entry.masterId]),
+      this.attachReferencesToMasterData([entry]),
+    ]);
+
+    const definition = {
+      ...definitionRow,
+      columnDefinitions: columns,
+      _count: {
+        masterData: definitionRow.masterDataCount,
+      },
+    };
+    const [enrichedDefinition] = await this.enrichMasterDefinitions([definition]);
+
+    return {
+      ...entryWithReferences,
+      master: enrichedDefinition,
+    };
+  }
+
+  /**
+   * Update master data
+   */
+  async updateMasterDataV2(id: bigint, dto: any) {
+    const existingEntry = await this.queryMasterDataEntryV2ById(id);
+
+    if (!existingEntry) {
+      throw new NotFoundException(`Master data entry with ID ${id} not found`);
+    }
+
+    const normalized = this.normalizeMasterDataEnvelope(dto, existingEntry.data || {});
+
+    const rows = await this.prisma.$queryRawUnsafe<Array<MasterDataEntryV2Row>>(
+      `
+        UPDATE mdm_industrial_approvals."mdm_master_data"
+        SET
+          data = $1::jsonb,
+          is_active = $2,
+          updated_by = $3,
+          updated_at = NOW()
+        WHERE id = $4::bigint
+        RETURNING
+          id::text AS id,
+          master_id AS "masterId",
+          tenant_id AS "tenantId",
+          data,
+          is_active AS "isActive",
+          created_by AS "createdBy",
+          updated_by AS "updatedBy",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+      `,
+      JSON.stringify(normalized.data),
+      normalized.isActive === undefined ? existingEntry.isActive : normalized.isActive,
+      dto.updatedBy || null,
+      String(id),
+    );
+
+    const [entry] = await this.attachReferencesToMasterData(rows);
+    return entry;
+  }
+
+  /**
+   * Delete master data
+   */
+  async deleteMasterDataV2(id: bigint) {
+    await this.getMasterDataEntryV2(id); // Verify exists
+
+    await this.prisma.$queryRawUnsafe(
+      `
+        DELETE FROM mdm_industrial_approvals."mdm_master_data"
+        WHERE id = $1::bigint
+      `,
+      String(id),
+    );
+
+    return { success: true };
+  }
+
+  /**
+   * Create a reference between master data entries
+   */
+  async createMasterDataReferenceV2(dto: any) {
+    // Verify both entries exist
+    await this.getMasterDataEntryV2(dto.fromDataId);
+    await this.getMasterDataEntryV2(dto.toDataId);
+
+    const rows = await this.prisma.$queryRawUnsafe<Array<MasterDataReferenceV2Row>>(
+      `
+        INSERT INTO mdm_industrial_approvals."mdm_master_data_references" (
+          from_data_id,
+          to_data_id,
+          column_key,
+          updated_at
+        )
+        VALUES ($1::bigint, $2::bigint, $3, NOW())
+        RETURNING
+          id::text AS id,
+          from_data_id::text AS "fromDataId",
+          to_data_id::text AS "toDataId",
+          column_key AS "columnKey",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+      `,
+      String(dto.fromDataId),
+      String(dto.toDataId),
+      dto.columnKey,
+    );
+
+    const [reference] = await this.enrichMasterDataReferences(rows);
+    return reference;
+  }
+
+  /**
+   * Get references for a data entry
+   */
+  async getMasterDataReferencesV2(dataId: bigint) {
+    return this.enrichMasterDataReferences(await this.queryMasterDataReferencesV2([dataId]));
+  }
+
+  /**
+   * Delete a reference
+   */
+  async deleteMasterDataReferenceV2(referenceId: bigint) {
+    const rows = await this.prisma.$queryRawUnsafe<Array<MasterDataReferenceV2Row>>(
+      `
+        SELECT
+          id::text AS id,
+          from_data_id::text AS "fromDataId",
+          to_data_id::text AS "toDataId",
+          column_key AS "columnKey",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM mdm_industrial_approvals."mdm_master_data_references"
+        WHERE id = $1::bigint
+        LIMIT 1
+      `,
+      String(referenceId),
+    );
+    const reference = rows[0];
+
+    if (!reference) {
+      throw new NotFoundException(`Reference with ID ${referenceId} not found`);
+    }
+
+    await this.prisma.$queryRawUnsafe(
+      `
+        DELETE FROM mdm_industrial_approvals."mdm_master_data_references"
+        WHERE id = $1::bigint
+      `,
+      String(referenceId),
+    );
+
+    return { success: true };
+  }
+
+  /**
+   * Bulk insert master data from CSV
+   */
+  async importMasterDataFromCsvV2(
+    masterId: number,
+    tenantId: number,
+    csvData: Array<Record<string, any>>,
+    createdBy: string,
+  ) {
+    const master = await this.getMasterDefinitionV2(masterId);
+    const columns = await this.getMasterColumnDefinitionsV2(masterId);
+
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as Array<{ row: number; error: string }>,
+    };
+
+    // Validate and insert each row
+    for (let i = 0; i < csvData.length; i++) {
+      try {
+        const row = csvData[i];
+
+        // Validate required fields
+        for (const column of columns) {
+          if (column.isRequired && !row[column.columnKey]) {
+            throw new Error(`Required field "${column.columnLabel}" is missing`);
+          }
+        }
+
+        // Create the data entry
+        await this.createMasterDataV2({
+          masterId,
+          tenantId,
+          data: row,
+          createdBy,
+        });
+
+        results.success++;
+      } catch (error: any) {
+        results.failed++;
+        results.errors.push({
+          row: i + 1,
+          error: error.message,
+        });
+      }
+    }
+
+    return results;
   }
 
   private async findRecordByIdOrThrow(definition: any, id: number) {

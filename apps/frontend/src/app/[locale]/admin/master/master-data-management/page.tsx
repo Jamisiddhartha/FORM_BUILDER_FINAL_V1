@@ -1,5 +1,5 @@
-import { MasterDataManagement } from '@/components/admin/master/MasterDataManagement';
+import { MasterDataManagementV2 } from '@/components/admin/master/MasterDataManagementV2';
 
 export default function MasterDataManagementPage() {
-  return <MasterDataManagement />;
+  return <MasterDataManagementV2 />;
 }

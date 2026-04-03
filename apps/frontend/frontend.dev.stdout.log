@@ -4,15 +4,87 @@
 
 ▲ Next.js 16.2.1 (Turbopack)
 - Local:         http://localhost:3000
-- Network:       http://192.168.137.114:3000
+- Network:       http://10.216.189.204:3000
 - Environments: .env.local
-✓ Ready in 1488ms
+✓ Ready in 1611ms
 Creating turbopack project {
-  dir: 'C:\\Users\\VE912YL\\form_builder_final_v1\\apps\\frontend',
+  dir: 'C:\\Users\\LB152TH\\FORM_BUILDER_FINAL_V1\\apps\\frontend',
   testMode: true
 }
 
- GET /en/admin/master/country 200 in 5.1s (next.js: 2.9s, proxy.ts: 309ms, application-code: 1885ms)
- GET /en/admin/master/country 200 in 911ms (next.js: 680ms, proxy.ts: 17ms, application-code: 214ms)
- GET /en/admin/master/country 200 in 228ms (next.js: 44ms, proxy.ts: 20ms, application-code: 164ms)
- GET /api/auth/profile 404 in 398ms (next.js: 153ms, application-code: 246ms)
+ GET /en 200 in 1757ms (next.js: 1284ms, proxy.ts: 7ms, application-code: 467ms)
+ GET /en 200 in 670ms (next.js: 447ms, proxy.ts: 6ms, application-code: 217ms)
+ GET /en/admin/master/master-data-management 200 in 1222ms (next.js: 1026ms, proxy.ts: 11ms, application-code: 184ms)
+ GET /favicon.ico 404 in 1084ms (next.js: 438ms, application-code: 646ms)
+ GET /en/login 200 in 1457ms (next.js: 1167ms, proxy.ts: 24ms, application-code: 266ms)
+ GET /en/login 200 in 1475ms (next.js: 1157ms, proxy.ts: 22ms, application-code: 296ms)
+ GET /en/login 200 in 585ms (next.js: 550ms, proxy.ts: 8ms, application-code: 27ms)
+ GET /en/login 200 in 55ms (next.js: 14ms, proxy.ts: 6ms, application-code: 35ms)
+ GET /en/admin/dashboard 200 in 1824ms (next.js: 1211ms, proxy.ts: 7ms, application-code: 606ms)
+ GET /en/admin/dashboard 200 in 654ms (next.js: 473ms, proxy.ts: 9ms, application-code: 172ms)
+ GET /en/admin/dashboard 200 in 140ms (next.js: 30ms, proxy.ts: 8ms, application-code: 103ms)
+ GET /en/admin/dashboard 200 in 141ms (next.js: 74ms, proxy.ts: 8ms, application-code: 58ms)
+ GET /en/admin/master/form-builder 200 in 3.3s (next.js: 2.8s, proxy.ts: 10ms, application-code: 509ms)
+ GET /en/admin/master/form-builder 200 in 620ms (next.js: 426ms, proxy.ts: 4ms, application-code: 190ms)
+ GET /en/admin/master/form-builder 200 in 174ms (next.js: 46ms, proxy.ts: 11ms, application-code: 117ms)
+ GET /en/admin/master/form-builder 200 in 176ms (next.js: 87ms, proxy.ts: 12ms, application-code: 77ms)
+ GET /en/admin/master/master-data-management 200 in 572ms (next.js: 524ms, proxy.ts: 6ms, application-code: 42ms)
+ GET /en/admin/master/master-data-management 200 in 580ms (next.js: 526ms, proxy.ts: 10ms, application-code: 43ms)
+ GET /en/admin/master/master-data-management 200 in 815ms (next.js: 610ms, proxy.ts: 23ms, application-code: 182ms)
+ GET /en/login 200 in 750ms (next.js: 444ms, proxy.ts: 14ms, application-code: 293ms)
+ GET /en/login 200 in 236ms (next.js: 151ms, proxy.ts: 15ms, application-code: 71ms)
+ GET /en/login 200 in 259ms (next.js: 39ms, proxy.ts: 13ms, application-code: 206ms)
+ GET /en/admin/dashboard 200 in 579ms (next.js: 434ms, proxy.ts: 12ms, application-code: 133ms)
+ GET /en/admin/dashboard 200 in 216ms (next.js: 29ms, proxy.ts: 7ms, application-code: 180ms)
+ GET /en/admin/dashboard 200 in 139ms (next.js: 42ms, proxy.ts: 13ms, application-code: 83ms)
+ GET /en/admin/dashboard 200 in 137ms (next.js: 78ms, proxy.ts: 16ms, application-code: 43ms)
+ GET /en/admin/master/form-builder 200 in 524ms (next.js: 474ms, proxy.ts: 8ms, application-code: 43ms)
+ GET /en/admin/master/master-data-management 200 in 516ms (next.js: 471ms, proxy.ts: 4ms, application-code: 40ms)
+ GET /en/admin/master/master-data-management 200 in 587ms (next.js: 408ms, proxy.ts: 10ms, application-code: 168ms)
+ GET /en/admin/master/master-data-management 200 in 567ms (next.js: 444ms, proxy.ts: 10ms, application-code: 113ms)
+✓ Compiled in 593ms
+ GET /en/admin/master/master-data-management 500 in 1772ms (next.js: 1427ms, proxy.ts: 61ms, application-code: 284ms)
+ GET /en/admin/master/master-data-management 500 in 77ms (next.js: 45ms, proxy.ts: 6ms, application-code: 26ms)
+ GET /en/admin/master/master-data-management 500 in 102ms (next.js: 73ms, proxy.ts: 8ms, application-code: 21ms)
+✓ Compiled in 137ms
+ GET /en/admin/master/master-data-management 200 in 992ms (next.js: 568ms, proxy.ts: 7ms, application-code: 417ms)
+ GET /en/admin/master/master-data-management 200 in 619ms (next.js: 504ms, proxy.ts: 9ms, application-code: 106ms)
+ GET /en/admin/master/master-data-management 200 in 712ms (next.js: 603ms, proxy.ts: 7ms, application-code: 103ms)
+✓ Compiled in 28ms
+ GET /en/admin/master/master-data-management 200 in 1045ms (next.js: 589ms, proxy.ts: 16ms, application-code: 440ms)
+ GET /en/admin/master/master-data-management 200 in 553ms (next.js: 397ms, proxy.ts: 12ms, application-code: 144ms)
+ GET /en/admin/master/master-data-management 200 in 536ms (next.js: 397ms, proxy.ts: 10ms, application-code: 129ms)
+ GET /en/admin/master/master-data-management 200 in 1243ms (next.js: 893ms, proxy.ts: 25ms, application-code: 325ms)
+ GET /en/login 200 in 2.3s (next.js: 1778ms, proxy.ts: 47ms, application-code: 446ms)
+ GET /en/login 200 in 2.9s (next.js: 1638ms, proxy.ts: 44ms, application-code: 1253ms)
+ GET /en/login 200 in 900ms (next.js: 423ms, proxy.ts: 278ms, application-code: 200ms)
+ GET /en/login 200 in 1348ms (next.js: 356ms, proxy.ts: 32ms, application-code: 960ms)
+ GET /en/admin/dashboard 200 in 1399ms (next.js: 1103ms, proxy.ts: 14ms, application-code: 281ms)
+ GET /en/admin/dashboard 200 in 612ms (next.js: 50ms, proxy.ts: 14ms, application-code: 548ms)
+ GET /en/admin/dashboard 200 in 557ms (next.js: 87ms, proxy.ts: 22ms, application-code: 448ms)
+ GET /en/admin/dashboard 200 in 573ms (next.js: 257ms, proxy.ts: 17ms, application-code: 298ms)
+ GET /en/admin/master/master-data-management 200 in 1234ms (next.js: 1111ms, proxy.ts: 10ms, application-code: 112ms)
+ GET /en/admin/master/country 200 in 5.0s (next.js: 3.2s, proxy.ts: 14ms, application-code: 1807ms)
+ GET /en/admin/master/country 200 in 1858ms (next.js: 1369ms, proxy.ts: 102ms, application-code: 387ms)
+ GET /en/admin/master/country 200 in 294ms (next.js: 100ms, proxy.ts: 17ms, application-code: 177ms)
+○ Compiling /[locale]/admin/master/state ...
+ GET /en/admin/master/district 200 in 13.6s (next.js: 12.3s, proxy.ts: 19ms, application-code: 1295ms)
+ GET /en/admin/master/district 200 in 1612ms (next.js: 974ms, proxy.ts: 26ms, application-code: 612ms)
+ GET /en/admin/master/state 200 in 17.4s (next.js: 17.0s, proxy.ts: 20ms, application-code: 430ms)
+ GET /en/admin/master/state 200 in 1052ms (next.js: 925ms, proxy.ts: 14ms, application-code: 112ms)
+ GET /en/admin/master/state 200 in 225ms (next.js: 53ms, proxy.ts: 12ms, application-code: 160ms)
+ GET /en/admin/master/state 200 in 187ms (next.js: 69ms, proxy.ts: 10ms, application-code: 108ms)
+○ Compiling /[locale]/admin/master/block ...
+ GET /en/admin/master/block 200 in 7.3s (next.js: 5.9s, proxy.ts: 12ms, application-code: 1469ms)
+ GET /en/admin/master/block 200 in 1781ms (next.js: 1091ms, proxy.ts: 25ms, application-code: 665ms)
+ GET /en/admin/master/block 200 in 468ms (next.js: 184ms, proxy.ts: 136ms, application-code: 148ms)
+✓ Finished filesystem cache database compaction in 11.8s
+ GET /en/admin/master/anchor-types 200 in 5.4s (next.js: 4.1s, proxy.ts: 12ms, application-code: 1347ms)
+ GET /en/admin/master/anchor-types 200 in 1323ms (next.js: 1045ms, proxy.ts: 12ms, application-code: 267ms)
+ GET /en/admin/master/anchor-types 200 in 181ms (next.js: 84ms, proxy.ts: 14ms, application-code: 84ms)
+ GET /en/admin/master/master-data-management 200 in 1265ms (next.js: 1068ms, proxy.ts: 9ms, application-code: 188ms)
+ GET /en/admin/master/master-data-management 200 in 118ms (next.js: 35ms, proxy.ts: 11ms, application-code: 72ms)
+✓ Compiled in 129ms
+ GET /en/admin/master/master-data-management 200 in 2.3s (next.js: 1393ms, proxy.ts: 16ms, application-code: 906ms)
+✓ Compiled in 36ms
+ GET /en/admin/master/master-data-management 200 in 2.6s (next.js: 1296ms, proxy.ts: 14ms, application-code: 1258ms)

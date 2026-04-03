@@ -4,6 +4,7 @@ import {
   CreateIncentiveApplicationFlowlogDto,
   UpdateIncentiveApplicationFlowlogDto,
 } from './dto';
+import { ApprovalStatus, ApplicationStatus, RecordStatus, RecommendationStatus } from '@prisma/client';
 
 @Injectable()
 export class IncentiveApplicationFlowlogService {
@@ -21,16 +22,16 @@ export class IncentiveApplicationFlowlogService {
         remarks: dto.remarks,
         delayRemarks: dto.delayRemarks,
         additionalPostData: dto.additionalPostData,
-        approvalStatus: dto.approvalStatus,
-        actionStatus: dto.actionStatus,
+        approvalStatus: dto.approvalStatus as ApprovalStatus,
+        actionStatus: dto.actionStatus as ApplicationStatus,
         userAgent: dto.userAgent,
         remoteIpAddress: dto.remoteIpAddress,
-        status: dto.status || 'Y', // default
+        status: (dto.status || 'Y') as RecordStatus, // default
         createdDate: new Date(), // ✅ capture server hit time here
         file: dto.file,
         uploadedFileName: dto.uploadedFileName,
         approvedIncentive: dto.approvedIncentive,
-        recommendation: dto.recommendation,
+        recommendation: dto.recommendation as RecommendationStatus | null | undefined,
       },
     });
   }
@@ -42,12 +43,23 @@ export class IncentiveApplicationFlowlogService {
 
     if (!existing) throw new NotFoundException(`Flowlog with ID ${id} not found`);
 
+    // Build update data with proper type casting for enums
+    const updateData: any = { modifiedOn: new Date() };
+    if (dto.approvalStatus !== undefined) updateData.approvalStatus = dto.approvalStatus as ApprovalStatus;
+    if (dto.actionStatus !== undefined) updateData.actionStatus = dto.actionStatus as ApplicationStatus;
+    if (dto.status !== undefined) updateData.status = dto.status as RecordStatus;
+    if (dto.recommendation !== undefined) updateData.recommendation = dto.recommendation as RecommendationStatus | null;
+    
+    // Copy other properties
+    Object.keys(dto).forEach(key => {
+      if (!['approvalStatus', 'actionStatus', 'status', 'recommendation'].includes(key)) {
+        updateData[key] = dto[key as keyof UpdateIncentiveApplicationFlowlogDto];
+      }
+    });
+
     return this.prisma.incentiveApplicationFlowlog.update({
       where: { id },
-      data: {
-        ...dto,
-        modifiedOn: new Date(),
-      },
+      data: updateData,
     });
   }
 

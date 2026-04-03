@@ -448,7 +448,7 @@ export class WorkflowConfigService {
           data.assignmentRuleJson === undefined
             ? undefined
             : data.assignmentRuleJson === null
-              ? Prisma.JsonNull
+              ? null
               : (data.assignmentRuleJson as any),
         actionAllowedJson: actionInfo
           ? (actionInfo.actionAllowedJson as any)

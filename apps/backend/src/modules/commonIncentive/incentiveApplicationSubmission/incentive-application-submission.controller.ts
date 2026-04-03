@@ -7,7 +7,7 @@ import {
   UpdateIncentiveApplicationSubmissionDto,
 } from './dto';
 import { Public } from '../../../common/public.decorator';
-import { ApplicationStatus } from '@prisma/client';
+import { ApplicationStatus } from './dto/create-incentive-application-submission.dto';
 
 
 @Controller('incentive-application-submission')

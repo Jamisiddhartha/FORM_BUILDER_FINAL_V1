@@ -3,12 +3,13 @@
 import React, { FormEvent, useRef, useState } from "react";
 import { useRouter } from "@/navigation";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { AxiosError } from "axios";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useLoading } from "@/contexts/LoadingContext";
+import apiClient from "@/lib/api-client";
 const SITEKEY = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY || "";
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 // Environment flags
 const ENVIRONMENT = process.env.NEXT_PUBLIC_ENVIRONMENT || "development";
@@ -33,9 +34,32 @@ function validatePassword(pw: string): { ok: boolean; reason?: string } {
   return { ok: true };
 }
 
+function getLoginErrorMessage(error: unknown): string {
+  if (error instanceof AxiosError) {
+    if (error.code === "ECONNABORTED") {
+      return "Login request timed out. Please try again.";
+    }
+
+    if (!error.response) {
+      return "Cannot reach the server. Make sure the backend is running and the API URL is correct.";
+    }
+
+    return (
+      (error.response.data as { message?: string } | undefined)?.message ||
+      "Login failed. Please try again."
+    );
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Network error. Please try again.";
+}
+
 export default function AuthForm() {
   const t = useTranslations("LoginPage");
-  const { setUser, setResources, fetchRoles } = useAuth();
+  const { setUser, setResources, fetchRoles, setAccessToken } = useAuth();
   const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -84,16 +108,12 @@ export default function AuthForm() {
         bodyData.hcaptchaToken = captchaToken;
       }
 
-      const res = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include", // Important: include cookies for HttpOnly auth
-        body: JSON.stringify(bodyData),
+      const response = await apiClient.post("/auth/login", bodyData, {
+        timeout: 10000,
       });
+      const data = response.data;
 
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
+      if (!data?.success) {
         setErrorMsg(data?.message || "Login failed. Try again.");
         if (IS_PROD) {
           captchaRef.current?.resetCaptcha();
@@ -103,7 +123,7 @@ export default function AuthForm() {
         return;
       }
 
-      const { user, profile, resources } = data.data;
+      const { accessToken, user, profile, resources } = data.data;
 
       // IMPORTANT: Update React Query cache with the login response data
       // This prevents the stale { unauthenticated: true } from redirecting back to login
@@ -112,6 +132,8 @@ export default function AuthForm() {
         profile,
         resources,
       });
+
+      setAccessToken(accessToken || null);
 
       // Now set the Zustand store
       setUser({
@@ -250,8 +272,7 @@ export default function AuthForm() {
       // Use replace instead of push to prevent back button issues
       router.replace(redirectPath);
     } catch (error) {
-      console.error("Login error:", error);
-      setErrorMsg("Network error. Please try again.");
+      setErrorMsg(getLoginErrorMessage(error));
       if (IS_PROD) {
         captchaRef.current?.resetCaptcha();
         setCaptchaToken(null);
