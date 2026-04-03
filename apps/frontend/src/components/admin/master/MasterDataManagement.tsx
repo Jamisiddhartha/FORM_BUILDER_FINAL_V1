@@ -194,16 +194,18 @@ export const MasterDataManagement = () => {
         {
           field: 'id',
           header: 'ID',
-          width: '5%',
+          width: '6%',
           filterType: 'number',
           sortable: true,
+          filterMatchMode: 'equals',
         },
         {
           field: 'name',
           header: 'Name',
-          width: '20%',
+          width: '18%',
           filterType: 'text',
           sortable: true,
+          filterMatchMode: 'contains',
           body: (row) => <span className="fw-semibold">{row.name || '-'}</span>,
         },
         {
@@ -212,7 +214,8 @@ export const MasterDataManagement = () => {
           width: '12%',
           filterType: 'text',
           sortable: true,
-          body: (row) => <code>{row.code || '-'}</code>,
+          filterMatchMode: 'contains',
+          body: (row) => <span className="badge bg-info">{row.code || '-'}</span>,
         },
         {
           field: 'is_active',
@@ -233,7 +236,7 @@ export const MasterDataManagement = () => {
         },
         {
           field: 'createdAt',
-          header: 'Created',
+          header: 'Created Date',
           width: '15%',
           filterType: 'date',
           sortable: true,
@@ -244,7 +247,7 @@ export const MasterDataManagement = () => {
         },
         {
           field: 'updatedAt',
-          header: 'Updated',
+          header: 'Updated Date',
           width: '15%',
           filterType: 'date',
           sortable: true,
