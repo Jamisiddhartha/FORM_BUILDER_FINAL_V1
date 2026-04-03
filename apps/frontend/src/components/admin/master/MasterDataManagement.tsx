@@ -18,6 +18,9 @@ import 'primereact/resources/primereact.min.css';
 import 'primeicons/primeicons.css';
 
 import { useColumnDefinitions, MasterColumnDefinition } from '@/hooks/master/useColumnDefinitions';
+import { useDataTableManager } from '@/hooks/useDataTableManager';
+import { ReusableDataTable } from '@/components/DataTable/ReusableDataTable';
+import { ReusableDataTableConfig, RowAction } from '@/components/DataTable/types';
 import { DynamicFormField } from './DynamicFormField';
 import { ColumnDefinitionManager } from './ColumnDefinitionManager';
 import { HierarchicalCascadingDemo } from './HierarchicalCascadingDemo';
@@ -154,7 +157,137 @@ export const MasterDataManagement = () => {
   );
   const { data: columnDefinitions = [] } = useColumnDefinitions(effectiveDefinitionId);
 
-  const createDefinitionMutation = useCreateMasterDataDefinition();
+  // Convert TreeTable data to flat array for ReusableDataTable
+  const flatRecords: MasterDataRecord[] = useMemo(() => {
+    const flattenRecords = (records: MasterDataTreeNode[], parentPrefix = ''): MasterDataRecord[] => {
+      return records.flatMap((node, idx) => {
+        const current = {
+          id: node.id,
+          ...node.data,
+          depth: parentPrefix ? parentPrefix.split('-').length : 0,
+        } as MasterDataRecord;
+
+        const children = node.children ? flattenRecords(node.children, `${parentPrefix}-${idx}`) : [];
+        return [current, ...children];
+      });
+    };
+
+    return flattenRecords(selectedDefinitionDetail?.tree || []);
+  }, [selectedDefinitionDetail?.tree]);
+
+  // Use data table manager for filtering, searching, sorting
+  const {
+    data: tableData,
+    selectedRows,
+    filteredData,
+    filters,
+    globalFilter,
+    handleSelectionChange,
+    handleGlobalFilterChange,
+    handleFiltersChange,
+    clearFilters,
+  } = useDataTableManager<MasterDataRecord>(flatRecords);
+
+  const tableConfig: ReusableDataTableConfig<MasterDataRecord> = useMemo(
+    () => ({
+      columns: [
+        {
+          field: 'id',
+          header: 'ID',
+          width: '5%',
+          filterType: 'number',
+          sortable: true,
+        },
+        {
+          field: 'name',
+          header: 'Name',
+          width: '20%',
+          filterType: 'text',
+          sortable: true,
+          body: (row) => <span className="fw-semibold">{row.name || '-'}</span>,
+        },
+        {
+          field: 'code',
+          header: 'Code',
+          width: '12%',
+          filterType: 'text',
+          sortable: true,
+          body: (row) => <code>{row.code || '-'}</code>,
+        },
+        {
+          field: 'is_active',
+          header: 'Status',
+          width: '10%',
+          filterType: 'select',
+          filterOptions: [
+            { label: 'Active', value: true },
+            { label: 'Inactive', value: false },
+          ],
+          sortable: true,
+          body: (row) => (
+            <Tag
+              value={row.is_active ? 'Active' : 'Inactive'}
+              severity={row.is_active ? 'success' : 'danger'}
+            />
+          ),
+        },
+        {
+          field: 'createdAt',
+          header: 'Created',
+          width: '15%',
+          filterType: 'date',
+          sortable: true,
+          body: (row) => {
+            if (!row.createdAt) return '-';
+            return new Date(row.createdAt).toLocaleDateString();
+          },
+        },
+        {
+          field: 'updatedAt',
+          header: 'Updated',
+          width: '15%',
+          filterType: 'date',
+          sortable: true,
+          body: (row) => {
+            if (!row.updatedAt) return '-';
+            return new Date(row.updatedAt).toLocaleDateString();
+          },
+        },
+      ],
+      dataKey: 'id',
+      rows: 10,
+      rowsPerPageOptions: [5, 10, 25, 50],
+      globalFilterFields: ['name', 'code', 'department_name', 'sub_department_name'],
+      selectable: true,
+      selectionMode: 'multiple',
+      paginator: true,
+      stripedRows: true,
+      showGridlines: true,
+      emptyMessage: 'No records found. Add a record or upload a CSV to populate this master.',
+    }),
+    []
+  );
+
+  // Memoized row actions
+  const recordRowActions: RowAction<MasterDataRecord>[] = useMemo(
+    () => [
+      {
+        icon: 'pi pi-pencil',
+        label: 'Edit',
+        severity: 'info',
+        onClick: (record) => handleOpenRecordDialog(record),
+        tooltip: 'Edit Record',
+      },
+      {
+        icon: 'pi pi-trash',
+        label: 'Delete',
+        severity: 'error',
+        onClick: (record) => handleDeleteRecord(record),
+        tooltip: 'Delete Record',
+      },
+    ],
+    []
+  );
   const updateDefinitionMutation = useUpdateMasterDataDefinition();
   const toggleDefinitionMutation = useToggleMasterDataDefinition();
   const deleteDefinitionMutation = useDeleteMasterDataDefinition();
@@ -256,6 +389,29 @@ export const MasterDataManagement = () => {
       setRecordForm(emptyRecordForm(columnDefinitions));
     }
     setRecordDialogVisible(true);
+  };
+
+  // Wrapper functions for row actions from ReusableDataTable
+  const handleOpenRecordDialog = (record: MasterDataRecord) => {
+    openRecordDialog(record);
+  };
+
+  const handleDeleteRecord = async (record: MasterDataRecord) => {
+    if (!selectedDefinition || !record.id) return;
+
+    if (!confirm(`Are you sure you want to delete this record?`)) {
+      return;
+    }
+
+    try {
+      await deleteRecordMutation.mutateAsync({
+        definitionId: selectedDefinition.id,
+        recordId: record.id,
+      });
+      showToast('success', 'Record Deleted', 'Record deleted successfully.');
+    } catch (error: unknown) {
+      showToast('error', 'Delete Error', getErrorMessage(error, 'Unable to delete record.'));
+    }
   };
 
   const handleProjectSubmit = async (event: React.FormEvent) => {
@@ -680,19 +836,33 @@ export const MasterDataManagement = () => {
           {/* Records Tab */}
           {activeTab === 'records' && (
             <>
-              <TreeTable value={selectedDefinitionDetail?.tree || []} tableStyle={{ minWidth: '100%' }}>
-                <Column field="name" header="Name" expander body={(node) => <span className="fw-semibold">{node.data.name}</span>} />
-                <Column field="code" header="Code" body={(node) => node.data.code} />
-                <Column field="validityPeriod" header="Validity" body={(node) => node.data.validityPeriod || 'Open-ended'} />
-                <Column field="department_name" header="Department" body={(node) => node.data.department_name || '-'} />
-                <Column field="sub_department_name" header="Sub-Department" body={(node) => node.data.sub_department_name || '-'} />
-                <Column field="is_active" header="Status" body={(node) => <Tag value={node.data.is_active ? 'Active' : 'Inactive'} severity={node.data.is_active ? 'success' : 'danger'} />} />
-                <Column body={recordActionTemplate} header="Actions" />
-              </TreeTable>
+              <div className="mb-3 d-flex gap-2">
+                <Button
+                  label="Clear Filters"
+                  icon="pi pi-filter-slash"
+                  severity="secondary"
+                  onClick={() => {
+                    clearFilters();
+                  }}
+                  disabled={!globalFilter && Object.keys(filters).length === 0}
+                />
+              </div>
 
-              {!selectedDefinitionDetail?.tree?.length && (
-                <div className="text-muted mt-3">No records yet. Add a record or upload a CSV to populate this master.</div>
-              )}
+              <ReusableDataTable<MasterDataRecord>
+                data={flatRecords}
+                config={tableConfig}
+                loading={false}
+                selectedRows={selectedRows}
+                onSelectionChange={handleSelectionChange}
+                onFiltersChange={handleFiltersChange}
+                onGlobalFilterChange={handleGlobalFilterChange}
+                rowActions={recordRowActions}
+                externalFilters={filters}
+                externalGlobalFilter={globalFilter}
+                getFilteredData={(rows) => {
+                  // Optional: bubble up filtered data for exports
+                }}
+              />
 
               {selectedDefinitionDetail?.uploadBatches?.length ? (
                 <div className="mt-4">
