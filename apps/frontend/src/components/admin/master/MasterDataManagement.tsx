@@ -19,6 +19,7 @@ import 'primeicons/primeicons.css';
 
 import { useColumnDefinitions, MasterColumnDefinition } from '@/hooks/master/useColumnDefinitions';
 import { DynamicFormField } from './DynamicFormField';
+import { ColumnDefinitionManager } from './ColumnDefinitionManager';
 import {
   MasterDataDefinition,
   MasterDataRecord,
@@ -128,6 +129,8 @@ export const MasterDataManagement = () => {
 
   const [definitionDialogVisible, setDefinitionDialogVisible] = useState(false);
   const [recordDialogVisible, setRecordDialogVisible] = useState(false);
+  const [columnDialogVisible, setColumnDialogVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<'records' | 'columns'>('records');
 
   const [editingDefinition, setEditingDefinition] = useState<MasterDataDefinition | null>(null);
   const [editingRecord, setEditingRecord] = useState<MasterDataRecord | null>(null);
@@ -538,63 +541,146 @@ export const MasterDataManagement = () => {
 
       <div className="card border-0 shadow-sm mt-4">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-3">
+          <div className="d-flex justify-content-between align-items-center mb-4">
             <div>
-              <h2 className="h5 mb-1">Record Hierarchy</h2>
+              <h2 className="h5 mb-1">{activeTab === 'columns' ? 'Column Definitions' : 'Record Hierarchy'}</h2>
               <div className="text-muted small">
                 {selectedDefinition
                   ? `${selectedDefinition.name} in ${selectedDefinition.schemaName}.${selectedDefinition.tableName}`
                   : 'Select a master definition to manage records'}
               </div>
             </div>
-            {selectedDefinitionDetail?.uploadBatches?.length ? (
-              <Tag value={`Last upload: ${selectedDefinitionDetail.uploadBatches[0].status}`} severity="info" />
-            ) : null}
+            <div className="d-flex gap-2 align-items-center">
+              {activeTab === 'columns' && effectiveDefinitionId && (
+                <Button
+                  label="Add Column"
+                  icon="pi pi-plus"
+                  severity="success"
+                  onClick={() => setColumnDialogVisible(true)}
+                />
+              )}
+              {selectedDefinitionDetail?.uploadBatches?.length && activeTab === 'records' ? (
+                <Tag value={`Last upload: ${selectedDefinitionDetail.uploadBatches[0].status}`} severity="info" />
+              ) : null}
+            </div>
           </div>
 
-          <TreeTable value={selectedDefinitionDetail?.tree || []} tableStyle={{ minWidth: '100%' }}>
-            <Column field="name" header="Name" expander body={(node) => <span className="fw-semibold">{node.data.name}</span>} />
-            <Column field="code" header="Code" body={(node) => node.data.code} />
-            <Column field="validityPeriod" header="Validity" body={(node) => node.data.validityPeriod || 'Open-ended'} />
-            <Column field="department_name" header="Department" body={(node) => node.data.department_name || '-'} />
-            <Column field="sub_department_name" header="Sub-Department" body={(node) => node.data.sub_department_name || '-'} />
-            <Column field="is_active" header="Status" body={(node) => <Tag value={node.data.is_active ? 'Active' : 'Inactive'} severity={node.data.is_active ? 'success' : 'danger'} />} />
-            <Column body={recordActionTemplate} header="Actions" />
-          </TreeTable>
+          {/* Tabs - Using Bootstrap styling */}
+          <div className="border-bottom mb-3">
+            <div className="d-flex gap-2">
+              <button
+                className={`btn btn-sm ${activeTab === 'columns' ? 'btn-primary' : 'btn-light'}`}
+                onClick={() => setActiveTab('columns')}
+                style={{ borderBottom: activeTab === 'columns' ? '3px solid #0d6efd' : 'none' }}
+              >
+                <i className="pi pi-list me-2"></i>
+                Columns ({columnDefinitions.length})
+              </button>
+              <button
+                className={`btn btn-sm ${activeTab === 'records' ? 'btn-primary' : 'btn-light'}`}
+                onClick={() => setActiveTab('records')}
+                style={{ borderBottom: activeTab === 'records' ? '3px solid #0d6efd' : 'none' }}
+              >
+                <i className="pi pi-table me-2"></i>
+                Records ({selectedDefinitionDetail?.tree?.length || 0})
+              </button>
+            </div>
+          </div>
 
-          {!selectedDefinitionDetail?.tree?.length && (
-            <div className="text-muted mt-3">No records yet. Add a record or upload a CSV to populate this master.</div>
+          {/* Columns Tab */}
+          {activeTab === 'columns' && effectiveDefinitionId && (
+            <div>
+              {columnDefinitions.length > 0 ? (
+                <div className="table-responsive">
+                  <table className="table table-sm align-middle">
+                    <thead className="bg-light">
+                      <tr>
+                        <th>Order</th>
+                        <th>Label</th>
+                        <th>Key</th>
+                        <th>Type</th>
+                        <th>Required</th>
+                        <th>Unique</th>
+                        <th>Searchable</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {columnDefinitions.map((col: any) => (
+                        <tr key={col.id}>
+                          <td><Tag value={String(col.displayOrder)} /></td>
+                          <td className="fw-semibold">{col.columnLabel}</td>
+                          <td><code>{col.columnKey}</code></td>
+                          <td><Tag value={col.dataType} severity="info" /></td>
+                          <td><Checkbox checked={col.isRequired} disabled /></td>
+                          <td><Checkbox checked={col.isUnique} disabled /></td>
+                          <td><Checkbox checked={col.isSearchable} disabled /></td>
+                          <td>
+                            <Button icon="pi pi-pencil" rounded text size="small" />
+                            <Button icon="pi pi-trash" rounded text severity="danger" size="small" />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="alert alert-info">
+                  <i className="pi pi-info-circle me-2"></i>
+                  <strong>No columns defined yet.</strong> Click the "Add Column" button in the top right to create columns for this master.
+                </div>
+              )}
+            </div>
           )}
 
-          {selectedDefinitionDetail?.uploadBatches?.length ? (
-            <div className="mt-4">
-              <h3 className="h6">Recent Upload Batches</h3>
-              <div className="table-responsive">
-                <table className="table table-sm align-middle">
-                  <thead>
-                    <tr>
-                      <th>File</th>
-                      <th>Status</th>
-                      <th>Total</th>
-                      <th>Success</th>
-                      <th>Failed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedDefinitionDetail.uploadBatches.map((batch) => (
-                      <tr key={batch.id}>
-                        <td>{batch.fileName}</td>
-                        <td><Tag value={batch.status} severity={batch.status === 'FAILED' ? 'danger' : batch.status === 'PARTIAL' ? 'warning' : 'success'} /></td>
-                        <td>{batch.totalRows}</td>
-                        <td>{batch.successfulRows}</td>
-                        <td>{batch.failedRows}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
+          {/* Records Tab */}
+          {activeTab === 'records' && (
+            <>
+              <TreeTable value={selectedDefinitionDetail?.tree || []} tableStyle={{ minWidth: '100%' }}>
+                <Column field="name" header="Name" expander body={(node) => <span className="fw-semibold">{node.data.name}</span>} />
+                <Column field="code" header="Code" body={(node) => node.data.code} />
+                <Column field="validityPeriod" header="Validity" body={(node) => node.data.validityPeriod || 'Open-ended'} />
+                <Column field="department_name" header="Department" body={(node) => node.data.department_name || '-'} />
+                <Column field="sub_department_name" header="Sub-Department" body={(node) => node.data.sub_department_name || '-'} />
+                <Column field="is_active" header="Status" body={(node) => <Tag value={node.data.is_active ? 'Active' : 'Inactive'} severity={node.data.is_active ? 'success' : 'danger'} />} />
+                <Column body={recordActionTemplate} header="Actions" />
+              </TreeTable>
+
+              {!selectedDefinitionDetail?.tree?.length && (
+                <div className="text-muted mt-3">No records yet. Add a record or upload a CSV to populate this master.</div>
+              )}
+
+              {selectedDefinitionDetail?.uploadBatches?.length ? (
+                <div className="mt-4">
+                  <h3 className="h6">Recent Upload Batches</h3>
+                  <div className="table-responsive">
+                    <table className="table table-sm align-middle">
+                      <thead>
+                        <tr>
+                          <th>File</th>
+                          <th>Status</th>
+                          <th>Total</th>
+                          <th>Success</th>
+                          <th>Failed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedDefinitionDetail.uploadBatches.map((batch) => (
+                          <tr key={batch.id}>
+                            <td>{batch.fileName}</td>
+                            <td><Tag value={batch.status} severity={batch.status === 'FAILED' ? 'danger' : batch.status === 'PARTIAL' ? 'warning' : 'success'} /></td>
+                            <td>{batch.totalRows}</td>
+                            <td>{batch.successfulRows}</td>
+                            <td>{batch.failedRows}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
 

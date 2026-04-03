@@ -357,3 +357,58 @@ export const useImportMasterDataCsv = () => {
     },
   });
 };
+
+// ========== Column Definition Operations ==========
+
+export const useGetColumnDefinitions = (masterId: number | null) => {
+  return useQuery<MasterColumnDefinition[]>({
+    queryKey: ['columnDefinitions', masterId],
+    queryFn: async () => {
+      if (!masterId) return [];
+      const response = await apiClient.get(
+        `/master/master-data-management/v2/definitions/${masterId}/columns`,
+      );
+      return response.data;
+    },
+    enabled: !!masterId,
+  });
+};
+
+export const useCreateMasterColumnDefinition = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: any) =>
+      (await apiClient.post(`/master/master-data-management/v2/definitions/${data.masterId}/columns`, [data])).data,
+    onSuccess: (_, variables: any) => {
+      queryClient.invalidateQueries({ queryKey: ['columnDefinitions', variables.masterId] });
+      queryClient.invalidateQueries({ queryKey: definitionKey(variables.masterId) });
+    },
+  });
+};
+
+export const useUpdateMasterColumnDefinition = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ columnId, data }: { columnId: number; data: any }) =>
+      (await apiClient.put(`/master/master-data-management/v2/columns/${columnId}`, data)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['columnDefinitions'] });
+      queryClient.invalidateQueries({ queryKey: ['mdm', 'v2', 'definitions'] });
+    },
+  });
+};
+
+export const useDeleteMasterColumnDefinition = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (columnId: number) =>
+      (await apiClient.delete(`/master/master-data-management/v2/columns/${columnId}`)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['columnDefinitions'] });
+      queryClient.invalidateQueries({ queryKey: ['mdm', 'v2', 'definitions'] });
+    },
+  });
+};
