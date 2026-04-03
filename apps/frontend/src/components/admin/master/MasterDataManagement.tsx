@@ -20,6 +20,7 @@ import 'primeicons/primeicons.css';
 import { useColumnDefinitions, MasterColumnDefinition } from '@/hooks/master/useColumnDefinitions';
 import { DynamicFormField } from './DynamicFormField';
 import { ColumnDefinitionManager } from './ColumnDefinitionManager';
+import { HierarchicalCascadingDemo } from './HierarchicalCascadingDemo';
 import {
   MasterDataDefinition,
   MasterDataRecord,
@@ -94,6 +95,41 @@ const buildTableName = (value: string) =>
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
 
+/**
+ * Generate master code based on first 4 letters of name + incrementing number
+ * Example: "Approval" → "APPR001", "APPR002", etc.
+ */
+const generateMasterCode = (masterName: string, existingDefinitions: any[]) => {
+  if (!masterName || masterName.trim().length === 0) {
+    return '';
+  }
+
+  // Get first 4 letters, uppercase
+  const prefix = masterName
+    .trim()
+    .substring(0, 4)
+    .toUpperCase()
+    .replace(/[^a-zA-Z0-9]/g, '');
+
+  if (prefix.length === 0) {
+    return '';
+  }
+
+  // Count existing codes with the same prefix
+  const matchingCodes = existingDefinitions
+    .filter((def) => def.code && def.code.startsWith(prefix))
+    .map((def) => {
+      const match = def.code.match(/(\d+)$/);
+      return match ? parseInt(match[1], 10) : 0;
+    });
+
+  // Get the next number
+  const nextNumber = matchingCodes.length > 0 ? Math.max(...matchingCodes) + 1 : 1;
+
+  // Format: PREFIXNNN (e.g., APPR001, APPR002)
+  return `${prefix}${String(nextNumber).padStart(3, '0')}`;
+};
+
 export const MasterDataManagement = () => {
   const toastRef = useRef<Toast | null>(null);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
@@ -130,7 +166,7 @@ export const MasterDataManagement = () => {
   const [definitionDialogVisible, setDefinitionDialogVisible] = useState(false);
   const [recordDialogVisible, setRecordDialogVisible] = useState(false);
   const [columnDialogVisible, setColumnDialogVisible] = useState(false);
-  const [activeTab, setActiveTab] = useState<'records' | 'columns'>('records');
+  const [activeTab, setActiveTab] = useState<'records' | 'columns' | 'demo'>('records');
 
   const [editingDefinition, setEditingDefinition] = useState<MasterDataDefinition | null>(null);
   const [editingRecord, setEditingRecord] = useState<MasterDataRecord | null>(null);
@@ -584,6 +620,14 @@ export const MasterDataManagement = () => {
                 <i className="pi pi-table me-2"></i>
                 Records ({selectedDefinitionDetail?.tree?.length || 0})
               </button>
+              <button
+                className={`btn btn-sm ${activeTab === 'demo' ? 'btn-primary' : 'btn-light'}`}
+                onClick={() => setActiveTab('demo')}
+                style={{ borderBottom: activeTab === 'demo' ? '3px solid #0d6efd' : 'none' }}
+              >
+                <i className="pi pi-play me-2"></i>
+                Demo
+              </button>
             </div>
           </div>
 
@@ -681,6 +725,13 @@ export const MasterDataManagement = () => {
               ) : null}
             </>
           )}
+
+          {/* Demo Tab - Hierarchical Cascading Demo */}
+          {activeTab === 'demo' && (
+            <div>
+              <HierarchicalCascadingDemo />
+            </div>
+          )}
         </div>
       </div>
 
@@ -693,8 +744,22 @@ export const MasterDataManagement = () => {
           )}
           <div className="row g-3">
             <div className="col-md-6">
-              <label className="form-label">Master Name</label>
-              <InputText className="w-100" value={definitionForm.name} onChange={(event) => setDefinitionForm((prev) => ({ ...prev, name: event.target.value }))} required />
+              <label className="form-label">Master Name <span className="text-danger">*</span></label>
+              <InputText 
+                className="w-100" 
+                value={definitionForm.name} 
+                onChange={(event) => {
+                  const newName = event.target.value;
+                  // Auto-generate code based on master name
+                  const generatedCode = generateMasterCode(newName, definitions);
+                  setDefinitionForm((prev) => ({ 
+                    ...prev, 
+                    name: newName,
+                    code: generatedCode || prev.code
+                  }));
+                }} 
+                required 
+              />
             </div>
             <div className="col-md-6">
               <label className="form-label">Master Code</label>

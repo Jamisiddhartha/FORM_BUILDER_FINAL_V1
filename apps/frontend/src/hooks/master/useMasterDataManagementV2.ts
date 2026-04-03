@@ -83,6 +83,28 @@ export interface MasterDefinitionDetailV2 extends MasterDefinitionV2 {
   masterData?: MasterDataEntryV2[];
 }
 
+type CreateMasterColumnDefinitionInput = {
+  masterId: number;
+  columnKey: string;
+  columnLabel: string;
+  dataType: string;
+  isRequired?: boolean;
+  isUnique?: boolean;
+  isSearchable?: boolean;
+  isListable?: boolean;
+  isFilterable?: boolean;
+  displayOrder?: number;
+  options?: Record<string, unknown>;
+  validation?: Record<string, unknown>;
+  defaultValue?: string;
+  placeholder?: string;
+};
+
+type UpdateMasterColumnDefinitionInput = {
+  columnId: number;
+  data: Partial<CreateMasterColumnDefinitionInput>;
+};
+
 const tenantsKey = () => ['mdm', 'v2', 'tenants'] as const;
 
 const tenantProjectsKey = (tenantId?: number) =>
@@ -378,10 +400,11 @@ export const useCreateMasterColumnDefinition = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: any) =>
+    mutationFn: async (data: CreateMasterColumnDefinitionInput) =>
       (await apiClient.post(`/master/master-data-management/v2/definitions/${data.masterId}/columns`, [data])).data,
-    onSuccess: (_, variables: any) => {
+    onSuccess: (_, variables: CreateMasterColumnDefinitionInput) => {
       queryClient.invalidateQueries({ queryKey: ['columnDefinitions', variables.masterId] });
+      queryClient.invalidateQueries({ queryKey: ['mdm', 'v2', 'definitions'] });
       queryClient.invalidateQueries({ queryKey: definitionKey(variables.masterId) });
     },
   });
@@ -391,7 +414,7 @@ export const useUpdateMasterColumnDefinition = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ columnId, data }: { columnId: number; data: any }) =>
+    mutationFn: async ({ columnId, data }: UpdateMasterColumnDefinitionInput) =>
       (await apiClient.put(`/master/master-data-management/v2/columns/${columnId}`, data)).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['columnDefinitions'] });

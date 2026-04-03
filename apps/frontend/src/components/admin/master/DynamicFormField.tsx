@@ -1,5 +1,4 @@
-import React, { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { InputText } from 'primereact/inputtext';
 import { InputTextarea } from 'primereact/inputtextarea';
 import { InputNumber } from 'primereact/inputnumber';
@@ -11,14 +10,83 @@ import { Calendar } from 'primereact/calendar';
 import apiClient from '@/lib/api-client';
 import { MasterColumnDefinition } from '@/hooks/master/useColumnDefinitions';
 
+type FieldOption = {
+  label: string;
+  value: unknown;
+};
+
+type StaticOptionItem = {
+  label?: string;
+  value?: unknown;
+  name?: string;
+  code?: string;
+};
+
+type ReferencedDefinition = {
+  id: number;
+  code: string;
+};
+
+type ReferencedMasterRow = {
+  id: string;
+  data?: Record<string, unknown>;
+};
+
 interface DynamicFormFieldProps {
   column: MasterColumnDefinition;
-  value: any;
-  onChange: (value: any) => void;
+  value: unknown;
+  onChange: (value: unknown) => void;
   error?: string;
   tenantId?: number | null;
   formData?: Record<string, unknown>;
 }
+
+const isEmpty = (value: unknown) =>
+  value === undefined ||
+  value === null ||
+  value === '' ||
+  (Array.isArray(value) && value.length === 0);
+
+const getStaticOptions = (
+  column: MasterColumnDefinition,
+  filterBy?: string | undefined,
+  filterValue?: unknown,
+): FieldOption[] => {
+  const optionConfig =
+    column.options && typeof column.options === 'object' ? column.options : undefined;
+
+  if (optionConfig?.source === 'STATIC') {
+    let items = Array.isArray(optionConfig.items) ? optionConfig.items : [];
+
+    // Apply cascading filter if filter_by is specified and filterValue exists
+    if (filterBy && (filterValue || filterValue === 0 || filterValue === '0')) {
+      items = items.filter((item: StaticOptionItem) => {
+        const itemFilterValue = item[filterBy];
+        return String(itemFilterValue || '') === String(filterValue || '');
+      });
+    } else if (filterBy && !filterValue && filterValue !== 0) {
+      // If filter_by is specified but no filter value, return empty
+      items = [];
+    }
+
+    return items.map((item: StaticOptionItem) => ({
+      label: String(item.label ?? item.value ?? ''),
+      value: item.value,
+    }));
+  }
+
+  if (Array.isArray(column.options)) {
+    return column.options.map((option: string | StaticOptionItem) => ({
+      label: typeof option === 'string' ? option : option.label || option.name,
+      value: typeof option === 'string' ? option : option.value || option.code,
+    }));
+  }
+
+  return Object.entries(column.options || {}).map(([key, val]) => ({
+    label: String(val),
+    value: key,
+  }));
+};
 
 export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
   column,
@@ -31,126 +99,131 @@ export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
   const optionConfig =
     column.options && typeof column.options === 'object' ? column.options : undefined;
   const isMasterOptionSource = optionConfig?.source === 'MASTER';
-  const masterCode = isMasterOptionSource ? optionConfig.master_code : undefined;
-  const filterBy = isMasterOptionSource ? optionConfig.filter_by : undefined;
+  const masterCode = isMasterOptionSource ? String(optionConfig.master_code || '') : '';
+  const filterBy = String(optionConfig?.filter_by || ''); // Extract for both STATIC and MASTER
   const filterValue = filterBy ? formData?.[filterBy] : undefined;
-
-  const definitionLookup = useQuery({
-    queryKey: ['mdm', 'v2', 'field-definition-options', tenantId ?? 'all', masterCode ?? 'none'],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (tenantId !== undefined && tenantId !== null) {
-        params.append('tenantId', String(tenantId));
-      }
-
-      const response = await apiClient.get(
-        `/master/master-data-management/v2/definitions?${params.toString()}`,
-      );
-
-      return response.data as Array<{ id: number; code: string }>;
-    },
-    enabled: isMasterOptionSource && !!masterCode,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const referencedMasterId = useMemo(
-    () =>
-      definitionLookup.data?.find((definition) => definition.code === masterCode)?.id,
-    [definitionLookup.data, masterCode],
+  const staticOptions = useMemo(
+    () => getStaticOptions(column, filterBy, filterValue),
+    [column, filterBy, filterValue],
   );
 
-  const masterOptionsQuery = useQuery({
-    queryKey: ['mdm', 'v2', 'field-master-options', referencedMasterId ?? 'none', tenantId ?? 'all'],
-    queryFn: async () => {
-      const params = new URLSearchParams();
+  const [dynamicOptions, setDynamicOptions] = useState<FieldOption[]>(staticOptions);
+  const [hasLoadedDynamicOptions, setHasLoadedDynamicOptions] = useState(
+    !isMasterOptionSource,
+  );
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+
+  useEffect(() => {
+    if (!isMasterOptionSource) {
+      setDynamicOptions(staticOptions);
+      setHasLoadedDynamicOptions(true);
+    } else {
+      setDynamicOptions([]);
+      setHasLoadedDynamicOptions(false);
+    }
+  }, [isMasterOptionSource, masterCode, staticOptions]);
+
+  const fetchDynamicOptions = useCallback(async () => {
+    if (!isMasterOptionSource || !masterCode) {
+      return;
+    }
+
+    setIsLoadingOptions(true);
+
+    try {
+      const definitionParams = new URLSearchParams();
       if (tenantId !== undefined && tenantId !== null) {
-        params.append('tenantId', String(tenantId));
+        definitionParams.append('tenantId', String(tenantId));
       }
-      params.append('isActive', 'true');
 
-      const response = await apiClient.get(
-        `/master/master-data-management/v2/masters/${referencedMasterId}/data?${params.toString()}`,
+      const definitionsResponse = await apiClient.get(
+        `/master/master-data-management/v2/definitions?${definitionParams.toString()}`,
       );
+      const definitions = Array.isArray(definitionsResponse.data)
+        ? (definitionsResponse.data as ReferencedDefinition[])
+        : [];
+      const referencedMaster = definitions.find((definition) => definition.code === masterCode);
 
-      return response.data as Array<{ id: string; data: Record<string, unknown> }>;
-    },
-    enabled: isMasterOptionSource && !!referencedMasterId,
-    staleTime: 1000 * 60 * 5,
-  });
+      if (!referencedMaster?.id) {
+        setDynamicOptions([]);
+        return;
+      }
 
-  const getEntryValue = (
-    entry: { id: string; data: Record<string, unknown> },
-    key: string,
-  ) => {
-    if (key === 'id') {
-      return entry.id;
-    }
+      const dataParams = new URLSearchParams();
+      if (tenantId !== undefined && tenantId !== null) {
+        dataParams.append('tenantId', String(tenantId));
+      }
+      dataParams.append('isActive', 'true');
 
-    return entry.data?.[key];
-  };
-
-  const resolvedOptions = useMemo(() => {
-    if (optionConfig?.source === 'STATIC') {
-      const items = Array.isArray(optionConfig.items) ? optionConfig.items : [];
-      return items.map((item: any) => ({
-        label: String(item.label ?? item.value ?? ''),
-        value: item.value,
-      }));
-    }
-
-    if (optionConfig?.source === 'MASTER') {
-      const labelKey = String(optionConfig.label_col || 'name');
-      const valueKey = String(optionConfig.value_col || 'id');
-      const sourceRows = Array.isArray(masterOptionsQuery.data) ? masterOptionsQuery.data : [];
+      const dataResponse = await apiClient.get(
+        `/master/master-data-management/v2/masters/${referencedMaster.id}/data?${dataParams.toString()}`,
+      );
+      const rows = Array.isArray(dataResponse.data)
+        ? (dataResponse.data as ReferencedMasterRow[])
+        : [];
 
       const filteredRows =
         filterBy && isEmpty(filterValue)
           ? []
-          : sourceRows.filter((entry) => {
+          : rows.filter((entry) => {
               if (!filterBy) {
                 return true;
               }
 
-              return (
-                String(getEntryValue(entry, String(filterBy)) ?? '') ===
-                String(filterValue)
-              );
+              return String(entry.data?.[filterBy] ?? '') === String(filterValue ?? '');
             });
 
-      return filteredRows.map((entry) => ({
-        label: String(getEntryValue(entry, labelKey) ?? entry.id),
-        value: getEntryValue(entry, valueKey),
-      }));
-    }
+      const labelKey = String(optionConfig?.label_col || 'name');
+      const valueKey = String(optionConfig?.value_col || 'id');
 
-    if (Array.isArray(column.options)) {
-      return column.options.map((option: any) => ({
-        label: typeof option === 'string' ? option : option.label || option.name,
-        value: typeof option === 'string' ? option : option.value || option.code,
-      }));
+      setDynamicOptions(
+        filteredRows.map((entry) => ({
+          label: String(entry.data?.[labelKey] ?? entry.id),
+          value: valueKey === 'id' ? entry.id : entry.data?.[valueKey],
+        })),
+      );
+    } catch {
+      setDynamicOptions([]);
+    } finally {
+      setIsLoadingOptions(false);
+      setHasLoadedDynamicOptions(true);
     }
+  }, [filterBy, filterValue, isMasterOptionSource, masterCode, optionConfig, tenantId]);
 
-    return Object.entries(column.options || {}).map(([key, val]) => ({
-      label: String(val),
-      value: key,
-    }));
-  }, [column.options, filterBy, filterValue, masterOptionsQuery.data, optionConfig]);
+  useEffect(() => {
+    if (isMasterOptionSource && hasLoadedDynamicOptions) {
+      void fetchDynamicOptions();
+    }
+  }, [fetchDynamicOptions, hasLoadedDynamicOptions, isMasterOptionSource]);
+
+  const handleOptionFocus = () => {
+    if (isMasterOptionSource && !hasLoadedDynamicOptions) {
+      void fetchDynamicOptions();
+    }
+  };
+
+  const commonProps = {
+    className: 'w-100',
+    placeholder: column.placeholder || '',
+    disabled: Boolean(isMasterOptionSource && filterBy && isEmpty(filterValue)),
+  };
 
   const renderField = () => {
-    const commonProps = {
-      className: 'w-100',
-      placeholder: column.placeholder || '',
-      disabled: false,
-    };
-
     switch (column.dataType) {
       case 'TEXT':
-        return (
+        return column.columnKey.toLowerCase().includes('description') ? (
+          <InputTextarea
+            {...commonProps}
+            rows={3}
+            value={value || ''}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        ) : (
           <InputText
             {...commonProps}
             type="text"
             value={value || ''}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(event) => onChange(event.target.value)}
           />
         );
 
@@ -159,7 +232,7 @@ export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
           <InputNumber
             {...commonProps}
             value={value || null}
-            onValueChange={(e) => onChange(e.value)}
+            onValueChange={(event) => onChange(event.value)}
             useGrouping={false}
           />
         );
@@ -170,7 +243,7 @@ export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
             <Checkbox
               inputId={`field-${column.id}`}
               checked={value === true || value === 'true'}
-              onChange={(e) => onChange(e.checked)}
+              onChange={(event) => onChange(event.checked)}
             />
             <label htmlFor={`field-${column.id}`} className="form-check-label">
               {column.columnLabel}
@@ -183,7 +256,9 @@ export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
           <Calendar
             {...commonProps}
             value={value ? new Date(value) : null}
-            onChange={(e) => onChange(e.value ? e.value.toISOString().split('T')[0] : null)}
+            onChange={(event) =>
+              onChange(event.value ? event.value.toISOString().split('T')[0] : null)
+            }
             dateFormat="yy-mm-dd"
             showIcon
           />
@@ -194,12 +269,15 @@ export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
           <Dropdown
             {...commonProps}
             value={value || null}
-            onChange={(e) => onChange(e.value)}
-            options={resolvedOptions}
+            onChange={(event) => onChange(event.value)}
+            onFocus={handleOptionFocus}
+            onShow={handleOptionFocus}
+            options={isMasterOptionSource ? dynamicOptions : staticOptions}
             optionLabel="label"
             optionValue="value"
             showClear={!column.isRequired}
             filter
+            loading={isLoadingOptions}
           />
         );
 
@@ -208,12 +286,15 @@ export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
           <MultiSelect
             {...commonProps}
             value={value || []}
-            onChange={(e) => onChange(e.value)}
-            options={resolvedOptions}
+            onChange={(event) => onChange(event.value)}
+            onFocus={handleOptionFocus}
+            onShow={handleOptionFocus}
+            options={isMasterOptionSource ? dynamicOptions : staticOptions}
             optionLabel="label"
             optionValue="value"
             showClear={!column.isRequired}
             filter
+            loading={isLoadingOptions}
           />
         );
 
@@ -223,7 +304,7 @@ export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
             name="file"
             auto
             customUpload
-            onSelect={(e) => onChange(e.files[0])}
+            onSelect={(event) => onChange(event.files[0])}
             accept="*"
             maxFileSize={5000000}
           />
@@ -235,7 +316,7 @@ export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
             {...commonProps}
             type="text"
             value={value || ''}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(event) => onChange(event.target.value)}
           />
         );
     }
@@ -254,15 +335,9 @@ export const DynamicFormField: React.FC<DynamicFormFieldProps> = ({
       )}
       {optionConfig?.source === 'MASTER' && filterBy && isEmpty(filterValue) && (
         <small className="form-text text-muted d-block mt-1">
-          Select {String(filterBy).replace(/_/g, ' ')} first to load options.
+          Select {filterBy.replace(/_/g, ' ')} first to load options.
         </small>
       )}
     </div>
   );
 };
-
-const isEmpty = (value: unknown) =>
-  value === undefined ||
-  value === null ||
-  value === '' ||
-  (Array.isArray(value) && value.length === 0);
