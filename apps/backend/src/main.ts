@@ -22,8 +22,36 @@ async function bootstrap() {
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+
+  const configuredOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const localDevOriginPattern =
+    /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i;
+  const lanDevOriginPattern =
+    /^https?:\/\/(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/i;
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const isConfiguredOrigin = configuredOrigins.includes(origin);
+      const isLocalDevOrigin =
+        process.env.NODE_ENV !== 'production' &&
+        (localDevOriginPattern.test(origin) || lanDevOriginPattern.test(origin));
+
+      if (isConfiguredOrigin || isLocalDevOrigin) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} not allowed by CORS`), false);
+    },
     credentials: true,
   });
   app.use(cookieParser());

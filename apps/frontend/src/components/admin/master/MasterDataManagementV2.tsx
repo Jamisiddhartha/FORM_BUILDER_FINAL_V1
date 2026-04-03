@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Button } from 'primereact/button';
 import { Dialog } from 'primereact/dialog';
 import { Dropdown } from 'primereact/dropdown';
@@ -15,20 +15,19 @@ import 'primereact/resources/themes/lara-light-blue/theme.css';
 import 'primereact/resources/primereact.min.css';
 import 'primeicons/primeicons.css';
 
+import { ReusableDataTable } from '@/components/DataTable/ReusableDataTable';
+import { ReusableDataTableConfig, RowAction } from '@/components/DataTable/types';
 import { DynamicFormField } from '@/components/admin/master/DynamicFormField';
 import {
   MasterDataEntryV2,
   MasterDefinitionV2,
-  MasterDataReferenceV2,
+  useCreateMasterColumnDefinition,
   useCreateMasterDataEntry,
-  useCreateMasterDataReference,
   useCreateMasterDefinition,
-  useDeleteMasterDataReference,
   useDeleteMasterDataEntry,
   useDeleteMasterDefinition,
   useImportMasterDataCsv,
   useMasterDataEntries,
-  useMasterDefinition,
   useMasterDefinitions,
   useUpdateMasterDataEntry,
   useUpdateMasterDefinition,
@@ -37,6 +36,7 @@ import {
   MasterColumnDefinition,
   useColumnDefinitions,
 } from '@/hooks/master/useColumnDefinitions';
+import { useDataTableManager } from '@/hooks/useDataTableManager';
 
 type DefinitionFormState = {
   projectId: number | null;
@@ -64,9 +64,35 @@ type ProjectOption = {
   name: string;
 };
 
-type ParentOption = {
+type StaticDropdownOption = {
   label: string;
   value: string;
+};
+
+type ColumnDataTypeOption = 'TEXT' | 'NUMBER' | 'DATE' | 'SELECT';
+
+type ColumnFormState = {
+  columnKey: string;
+  columnLabel: string;
+  dataType: ColumnDataTypeOption;
+  isRequired: boolean;
+  isSearchable: boolean;
+  isListable: boolean;
+  fromMasterCode: string | null;
+  toMasterCode: string | null;
+};
+
+type DefinitionTableRow = MasterDefinitionV2 & {
+  projectLabel: string;
+  columnCount: number;
+  rowCount: number;
+};
+
+type RecordTableRow = MasterDataEntryV2 & {
+  detailsLabel: string;
+  validFromLabel: string;
+  validToLabel: string;
+  sortOrderValue: number;
 };
 
 const TEMP_TENANT_ID = 1;
@@ -78,55 +104,51 @@ const mockProjects: ProjectOption[] = [
   { id: 103, name: 'Environmental Certificate' },
 ];
 
+const FALLBACK_COUNTRIES = ['India', 'USA', 'UK', 'Canada', 'Australia'];
+
+const FALLBACK_STATES: Record<string, string[]> = {
+  India: ['West Bengal', 'Maharashtra', 'Karnataka'],
+  USA: ['California', 'Texas', 'Florida'],
+  UK: ['England', 'Scotland'],
+};
+
+const FALLBACK_DISTRICTS: Record<string, string[]> = {
+  'West Bengal': ['Kolkata', 'Howrah'],
+  Maharashtra: ['Mumbai', 'Pune'],
+};
+
+const FALLBACK_BLOCKS: Record<string, string[]> = {
+  Kolkata: ['Block A', 'Block B'],
+  Howrah: ['Howrah Block 1'],
+  Mumbai: ['Andheri', 'Bandra'],
+  Pune: ['Pune Block 1'],
+};
+
+const FALLBACK_FIELD_LABELS = {
+  country: 'Country',
+  state: 'State',
+  district: 'District',
+  block: 'Block/Ward',
+} as const;
+
+const FALLBACK_FIELD_RESET_MAP: Record<string, string[]> = {
+  country: ['state', 'district', 'block'],
+  state: ['district', 'block'],
+  district: ['block'],
+};
+
+const COLUMN_DATA_TYPE_OPTIONS: Array<{ label: string; value: ColumnDataTypeOption }> = [
+  { label: 'TEXT', value: 'TEXT' },
+  { label: 'NUMBER', value: 'NUMBER' },
+  { label: 'DATE', value: 'DATE' },
+  { label: 'SELECT', value: 'SELECT' },
+];
+
 const isStateColumn = (column: MasterColumnDefinition) =>
   column.columnKey === 'state_id' || column.columnLabel.trim().toLowerCase() === 'state';
 
-const buildMockColumns = (masterId?: number): MasterColumnDefinition[] => {
-  if (!masterId) {
-    return [];
-  }
-
-  return [
-    {
-      id: -1,
-      masterId,
-      columnKey: 'name',
-      columnLabel: 'Name',
-      dataType: 'TEXT',
-      isRequired: true,
-      isUnique: false,
-      isSearchable: true,
-      isListable: true,
-      isFilterable: false,
-      displayOrder: 1,
-      options: undefined,
-      validation: undefined,
-      defaultValue: '',
-      placeholder: 'Enter name',
-      createdAt: new Date(0).toISOString(),
-      updatedAt: new Date(0).toISOString(),
-    },
-    {
-      id: -2,
-      masterId,
-      columnKey: 'code',
-      columnLabel: 'Code',
-      dataType: 'TEXT',
-      isRequired: true,
-      isUnique: false,
-      isSearchable: true,
-      isListable: true,
-      isFilterable: false,
-      displayOrder: 2,
-      options: undefined,
-      validation: undefined,
-      defaultValue: '',
-      placeholder: 'Enter code',
-      createdAt: new Date(0).toISOString(),
-      updatedAt: new Date(0).toISOString(),
-    },
-  ];
-};
+const isDistrictColumn = (column: MasterColumnDefinition) =>
+  column.columnKey === 'district_id' || column.columnLabel.trim().toLowerCase() === 'district';
 
 const emptyDefinitionForm = (projectId: number | null = null): DefinitionFormState => ({
   projectId,
@@ -140,12 +162,72 @@ const emptyDefinitionForm = (projectId: number | null = null): DefinitionFormSta
   isActive: true,
 });
 
-const normalizeCode = (value: string) =>
+const emptyColumnForm = (): ColumnFormState => ({
+  columnKey: '',
+  columnLabel: '',
+  dataType: 'TEXT',
+  isRequired: false,
+  isSearchable: false,
+  isListable: true,
+  fromMasterCode: null,
+  toMasterCode: null,
+});
+
+const getMasterCodeStem = (value: string) =>
+  value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 4);
+
+const extractMasterCodeSequence = (code: string) => {
+  const match = code.match(/^M_[A-Z0-9]{1,4}(\d{3})$/);
+  return match ? Number(match[1]) : null;
+};
+
+const normalizeColumnKey = (value: string) =>
   value
     .trim()
     .replace(/[^a-zA-Z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
-    .toUpperCase();
+    .toLowerCase();
+
+const buildAutoMasterCode = (
+  name: string,
+  definitions: MasterDefinitionV2[],
+  currentDefinition?: MasterDefinitionV2 | null,
+) => {
+  const stem = getMasterCodeStem(name);
+
+  if (!stem) {
+    return '';
+  }
+
+  const prefix = `M_${stem}`;
+
+  if (currentDefinition?.code) {
+    const currentSequence = extractMasterCodeSequence(currentDefinition.code);
+
+    if (currentSequence !== null) {
+      return `${prefix}${String(currentSequence).padStart(3, '0')}`;
+    }
+  }
+
+  let maxSequence = 0;
+
+  definitions.forEach((definition) => {
+    if (currentDefinition?.id === definition.id) {
+      return;
+    }
+
+    const sequence = extractMasterCodeSequence(definition.code);
+
+    if (sequence !== null) {
+      maxSequence = Math.max(maxSequence, sequence);
+    }
+  });
+
+  return `${prefix}${String(maxSequence + 1).padStart(3, '0')}`;
+};
 
 const parseBoolean = (value?: string | null) => {
   if (value === undefined || value === null || value === '') {
@@ -197,6 +279,13 @@ const buildRecordForm = (
     return accumulator;
   }, initial);
 };
+
+const buildFallbackRecordForm = (source?: Record<string, unknown>): RecordFormState => ({
+  country: typeof source?.country === 'string' ? source.country : '',
+  state: typeof source?.state === 'string' ? source.state : '',
+  district: typeof source?.district === 'string' ? source.district : '',
+  block: typeof source?.block === 'string' ? source.block : '',
+});
 
 const emptyRecordFixedFields = (): RecordFixedFieldsState => ({
   validFrom: '',
@@ -274,11 +363,17 @@ const formatCellValue = (value: unknown) => {
   return String(value);
 };
 
+const toDropdownOptions = (values: string[]): StaticDropdownOption[] =>
+  values.map((value) => ({
+    label: value,
+    value,
+  }));
+
 const getRecordLabel = (
   record: MasterDataEntryV2,
   columns: MasterColumnDefinition[],
 ) => {
-  const preferredKeys = ['name', 'code'];
+  const preferredKeys = ['name', 'code', 'details'];
 
   for (const key of preferredKeys) {
     const value = record.data?.[key];
@@ -292,17 +387,36 @@ const getRecordLabel = (
   return isEmptyValue(value) ? `Record ${record.id}` : String(value);
 };
 
-const getParentReference = (record?: MasterDataEntryV2 | null) =>
-  record?.referencesFrom?.find((reference) => reference.columnKey === 'parent_id') ?? null;
+const getThemeIndex = (value: string) =>
+  value.split('').reduce((accumulator, character) => accumulator + character.charCodeAt(0), 0);
+
+const getDefinitionTileStyle = (definition: MasterDefinitionV2) => {
+  const themes = [
+    { background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)', color: '#15803d' },
+    { background: 'linear-gradient(135deg, #dbeafe, #bfdbfe)', color: '#1d4ed8' },
+    { background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)', color: '#6d28d9' },
+    { background: 'linear-gradient(135deg, #fce7f3, #fbcfe8)', color: '#be185d' },
+    { background: 'linear-gradient(135deg, #ffedd5, #fed7aa)', color: '#c2410c' },
+  ];
+
+  return themes[getThemeIndex(definition.code || definition.name) % themes.length];
+};
+
+const formatIndianCount = (value: number) => new Intl.NumberFormat('en-IN').format(value);
+
+const getScopeLabel = (definition: MasterDefinitionV2) =>
+  definition.tenantId ? 'Global' : 'Global';
 
 export const MasterDataManagementV2 = () => {
   const toastRef = useRef<Toast | null>(null);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   const tenantId = TEMP_TENANT_ID;
+  const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>('all');
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [definitionSearch, setDefinitionSearch] = useState('');
   const [definitionDialogVisible, setDefinitionDialogVisible] = useState(false);
+  const [columnDialogVisible, setColumnDialogVisible] = useState(false);
   const [recordDialogVisible, setRecordDialogVisible] = useState(false);
   const [selectedDefinitionId, setSelectedDefinitionId] = useState<number | null>(null);
   const [editingDefinition, setEditingDefinition] = useState<MasterDefinitionV2 | null>(null);
@@ -310,61 +424,58 @@ export const MasterDataManagementV2 = () => {
   const [definitionForm, setDefinitionForm] = useState<DefinitionFormState>(
     emptyDefinitionForm(),
   );
+  const [columnForm, setColumnForm] = useState<ColumnFormState>(emptyColumnForm());
   const [recordForm, setRecordForm] = useState<RecordFormState>({});
-  const [parentId, setParentId] = useState<string | null>(null);
   const [recordFixedFields, setRecordFixedFields] = useState<RecordFixedFieldsState>(
     emptyRecordFixedFields(),
   );
 
+  const { data: allTenantDefinitions = [] } = useMasterDefinitions(tenantId, undefined);
   const { data: projectDefinitions = [] } = useMasterDefinitions(
-    selectedProject ? tenantId : undefined,
+    tenantId,
     selectedProject ?? undefined,
   );
-  const definitions = selectedProject ? projectDefinitions : [];
+  const definitions = useMemo(() => projectDefinitions, [projectDefinitions]);
   const filteredDefinitions = useMemo(() => {
     const search = definitionSearch.trim().toLowerCase();
 
-    if (!search) {
-      return definitions;
-    }
+    return definitions.filter((definition) => {
+      const matchesTenant =
+        selectedTenantFilter === 'all' ||
+        selectedTenantFilter === `tenant-${definition.tenantId}`;
 
-    return definitions.filter((definition) =>
-      [definition.name, definition.code, definition.description ?? '']
+      if (!matchesTenant) {
+        return false;
+      }
+
+      if (!search) {
+        return true;
+      }
+
+      return [definition.name, definition.code, definition.description ?? '']
         .join(' ')
         .toLowerCase()
-        .includes(search),
-      );
-    }, [definitionSearch, definitions]);
-
-  useEffect(() => {
-    if (!definitions.length) {
-      setSelectedDefinitionId(null);
-      return;
-    }
-
-    if (
-      !selectedDefinitionId ||
-      !definitions.some((definition) => definition.id === selectedDefinitionId)
-    ) {
-      setSelectedDefinitionId(definitions[0].id);
-    }
-  }, [definitions, selectedDefinitionId]);
+        .includes(search);
+    });
+  }, [definitionSearch, definitions, selectedTenantFilter]);
 
   const effectiveDefinitionId =
-    selectedDefinitionId && definitions.some((definition) => definition.id === selectedDefinitionId)
+    selectedDefinitionId &&
+    filteredDefinitions.some((definition) => definition.id === selectedDefinitionId)
       ? selectedDefinitionId
-      : definitions[0]?.id;
+      : filteredDefinitions[0]?.id ?? null;
 
   const selectedProjectOption = useMemo(
     () => mockProjects.find((project) => project.id === selectedProject) || null,
     [selectedProject],
   );
   const selectedDefinition = useMemo(
-    () => definitions.find((definition) => definition.id === effectiveDefinitionId) || null,
-    [definitions, effectiveDefinitionId],
+    () =>
+      filteredDefinitions.find((definition) => definition.id === effectiveDefinitionId) ||
+      null,
+    [filteredDefinitions, effectiveDefinitionId],
   );
 
-  const { data: selectedDefinitionDetail } = useMasterDefinition(effectiveDefinitionId);
   const {
     data: columnDefinitions = [],
     isLoading: isColumnDefinitionsLoading,
@@ -375,57 +486,83 @@ export const MasterDataManagementV2 = () => {
   );
 
   const createDefinitionMutation = useCreateMasterDefinition();
+  const createColumnMutation = useCreateMasterColumnDefinition();
   const updateDefinitionMutation = useUpdateMasterDefinition();
   const deleteDefinitionMutation = useDeleteMasterDefinition();
   const createRecordMutation = useCreateMasterDataEntry();
   const updateRecordMutation = useUpdateMasterDataEntry();
-  const createReferenceMutation = useCreateMasterDataReference();
-  const deleteReferenceMutation = useDeleteMasterDataReference();
   const deleteRecordMutation = useDeleteMasterDataEntry();
   const importCsvMutation = useImportMasterDataCsv();
 
   const activeColumns = useMemo(() => {
-    if (columnDefinitions.length) {
-      return columnDefinitions.filter((column) => !isStateColumn(column));
-    }
-
     if (isColumnDefinitionsLoading || !effectiveDefinitionId) {
       return [];
     }
 
-    return buildMockColumns(effectiveDefinitionId).filter((column) => !isStateColumn(column));
+    return columnDefinitions.filter(
+      (column) => !isStateColumn(column) && !isDistrictColumn(column),
+    );
   }, [columnDefinitions, effectiveDefinitionId, isColumnDefinitionsLoading]);
+
+  const shouldUseStaticFallbackForm =
+    !isColumnDefinitionsLoading && effectiveDefinitionId !== null && columnDefinitions.length === 0;
+  const shouldShowAutoMasterNameField =
+    !shouldUseStaticFallbackForm && effectiveDefinitionId !== null && activeColumns.length === 0;
 
   const listableColumns = useMemo(() => {
     const visible = activeColumns.filter((column) => column.isListable);
     return visible.length ? visible : activeColumns;
   }, [activeColumns]);
 
-  const currentParentReference = useMemo(
-    () => getParentReference(editingRecord),
-    [editingRecord],
-  );
+  const selectedCountry = typeof recordForm.country === 'string' ? recordForm.country : '';
+  const selectedState = typeof recordForm.state === 'string' ? recordForm.state : '';
+  const selectedDistrict = typeof recordForm.district === 'string' ? recordForm.district : '';
 
-  const parentOptions = useMemo<ParentOption[]>(
+  const countryOptions = useMemo(
+    () => toDropdownOptions(FALLBACK_COUNTRIES),
+    [],
+  );
+  const stateOptions = useMemo(
+    () => toDropdownOptions(FALLBACK_STATES[selectedCountry] ?? []),
+    [selectedCountry],
+  );
+  const districtOptions = useMemo(
+    () => toDropdownOptions(FALLBACK_DISTRICTS[selectedState] ?? []),
+    [selectedState],
+  );
+  const blockOptions = useMemo(
     () =>
-      records
-        .filter((record) => record.id !== editingRecord?.id)
-        .map((record) => ({
-          label: getRecordLabel(record, activeColumns),
-          value: record.id,
-        })),
-    [records, editingRecord, activeColumns],
+      toDropdownOptions(
+        FALLBACK_BLOCKS[selectedDistrict] ??
+          (selectedDistrict ? [`${selectedDistrict} Block 1`] : []),
+      ),
+    [selectedDistrict],
   );
-
-  const shouldShowParentField = parentOptions.length > 0 || !!currentParentReference;
+  const autoMasterNameValue = editingRecord?.data?.details || selectedDefinition?.name || '';
 
   const recordPayloadPreview = useMemo(
-    () =>
-      activeColumns.reduce<Record<string, unknown>>((accumulator, column) => {
+    () => {
+      if (shouldUseStaticFallbackForm) {
+        return {
+          country: serializeValue(recordForm.country),
+          state: serializeValue(recordForm.state),
+          district: serializeValue(recordForm.district),
+          block: serializeValue(recordForm.block),
+        };
+      }
+
+      if (shouldShowAutoMasterNameField) {
+        return {
+          details: autoMasterNameValue || null,
+        };
+      }
+
+      return activeColumns.reduce<Record<string, unknown>>((accumulator, column) => {
         accumulator[column.columnKey] = serializeValue(recordForm[column.columnKey]);
         return accumulator;
-      }, {}),
-    [activeColumns, recordForm],
+      }, {});
+    },
+    [activeColumns, autoMasterNameValue, recordForm, shouldShowAutoMasterNameField, shouldUseStaticFallbackForm],
   );
 
   const showToast = (severity: 'success' | 'error' | 'warn', summary: string, detail: string) => {
@@ -444,13 +581,18 @@ export const MasterDataManagementV2 = () => {
     return fallback;
   };
 
+  const syncDefinitionCode = (
+    name: string,
+    currentDefinition?: MasterDefinitionV2 | null,
+  ) => buildAutoMasterCode(name, allTenantDefinitions, currentDefinition);
+
   const openDefinitionDialog = (definition?: MasterDefinitionV2 | null) => {
     if (definition) {
       setEditingDefinition(definition);
       setDefinitionForm({
         projectId: definition.projectId ?? selectedProject ?? null,
         name: definition.name,
-        code: definition.code,
+        code: syncDefinitionCode(definition.name, definition) || definition.code,
         description: definition.description || '',
         icon: definition.icon || '',
         isSystem: definition.isSystem,
@@ -466,26 +608,135 @@ export const MasterDataManagementV2 = () => {
     setDefinitionDialogVisible(true);
   };
 
+  const handleDefinitionNameChange = (name: string) => {
+    setDefinitionForm((previous) => ({
+      ...previous,
+      name,
+      code: syncDefinitionCode(name, editingDefinition),
+    }));
+  };
+
+  const generatedDefinitionCode = definitionForm.name.trim()
+    ? syncDefinitionCode(definitionForm.name, editingDefinition) || definitionForm.code
+    : definitionForm.code;
+
+  const openColumnDialog = () => {
+    if (!selectedDefinition) {
+      showToast('warn', 'Definition Required', 'Select a master before adding columns.');
+      return;
+    }
+
+    setColumnForm(emptyColumnForm());
+    setColumnDialogVisible(true);
+  };
+
+  const handleColumnFormChange = <K extends keyof ColumnFormState>(
+    key: K,
+    value: ColumnFormState[K],
+  ) => {
+    setColumnForm((previous) => {
+      const next = {
+        ...previous,
+        [key]: value,
+      };
+
+      if (key === 'dataType' && value !== 'SELECT') {
+        next.fromMasterCode = null;
+        next.toMasterCode = null;
+      }
+
+      if (key === 'fromMasterCode') {
+        if (value === previous.toMasterCode) {
+          next.toMasterCode = null;
+        }
+      }
+
+      return next;
+    });
+  };
+
+  const handleColumnSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!selectedDefinition) {
+      showToast('warn', 'Definition Required', 'Select a master before adding columns.');
+      return;
+    }
+
+    const columnKey = normalizeColumnKey(columnForm.columnKey);
+    const columnLabel = columnForm.columnLabel.trim();
+
+    if (!columnKey || !columnLabel) {
+      showToast('warn', 'Validation Error', 'Column Key and Column Label are required.');
+      return;
+    }
+
+    if (
+      columnForm.dataType === 'SELECT' &&
+      (!columnForm.fromMasterCode ||
+        !columnForm.fromMasterCode.trim() ||
+        !columnForm.toMasterCode ||
+        !columnForm.toMasterCode.trim())
+    ) {
+      showToast(
+        'warn',
+        'Validation Error',
+        'From Master and To Master are required for SELECT columns.',
+      );
+      return;
+    }
+
+    try {
+      await createColumnMutation.mutateAsync({
+        masterId: selectedDefinition.id,
+        columnKey,
+        columnLabel,
+        dataType: columnForm.dataType,
+        isRequired: columnForm.isRequired,
+        isSearchable: columnForm.isSearchable,
+        isListable: columnForm.isListable,
+        options:
+          columnForm.dataType === 'SELECT'
+            ? {
+                source: 'MASTER',
+                master_code: columnForm.toMasterCode,
+                from_master_code: columnForm.fromMasterCode,
+                to_master_code: columnForm.toMasterCode,
+                value_col: 'id',
+                label_col: 'name',
+              }
+            : undefined,
+      });
+
+      setColumnDialogVisible(false);
+      setColumnForm(emptyColumnForm());
+      showToast('success', 'Column Added', 'Column definition created successfully.');
+    } catch (error: unknown) {
+      showToast('error', 'Column Error', getErrorMessage(error, 'Unable to save column.'));
+    }
+  };
+
   const openRecordDialog = (record?: MasterDataEntryV2 | null) => {
     if (!selectedDefinition) {
       showToast('warn', 'Definition Required', 'Select a master before adding data.');
       return;
     }
 
-    if (!activeColumns.length) {
-      showToast('warn', 'Columns Loading', 'Wait a moment while the form fields are loading.');
-      return;
-    }
-
     if (record) {
       setEditingRecord(record);
-      setRecordForm(buildRecordForm(activeColumns, record.data));
-      setParentId(getParentReference(record)?.toDataId ?? null);
+      setRecordForm(
+        shouldUseStaticFallbackForm
+          ? buildFallbackRecordForm(record.data)
+          : buildRecordForm(activeColumns, record.data),
+      );
       setRecordFixedFields(buildRecordFixedFields(record));
     } else {
       setEditingRecord(null);
-      setRecordForm(buildEmptyRecordForm(activeColumns));
-      setParentId(null);
+      setRecordForm(
+        shouldUseStaticFallbackForm
+          ? buildFallbackRecordForm()
+          : buildEmptyRecordForm(activeColumns),
+      );
       setRecordFixedFields(emptyRecordFixedFields());
     }
 
@@ -493,10 +744,20 @@ export const MasterDataManagementV2 = () => {
   };
 
   const handleRecordFieldChange = (key: string, value: unknown) => {
-    setRecordForm((previous) => ({
-      ...previous,
-      [key]: value,
-    }));
+    setRecordForm((previous) => {
+      const next = {
+        ...previous,
+        [key]: value,
+      };
+
+      if (shouldUseStaticFallbackForm) {
+        for (const dependentKey of FALLBACK_FIELD_RESET_MAP[key] ?? []) {
+          next[dependentKey] = '';
+        }
+      }
+
+      return next;
+    });
   };
 
   const handleRecordFixedFieldChange = (
@@ -512,17 +773,25 @@ export const MasterDataManagementV2 = () => {
   const handleDefinitionSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!selectedProject) {
+    const activeProjectId = definitionForm.projectId ?? selectedProject;
+    const generatedCode = generatedDefinitionCode;
+
+    if (!activeProjectId) {
       showToast('warn', 'Project Required', 'Select a project before saving a master.');
+      return;
+    }
+
+    if (!generatedCode) {
+      showToast('warn', 'Code Required', 'Enter a master name to generate the master code.');
       return;
     }
 
     try {
       const payload = {
         tenantId,
-        projectId: selectedProject,
+        projectId: activeProjectId,
         name: definitionForm.name,
-        code: definitionForm.code,
+        code: generatedCode,
         description: definitionForm.description || undefined,
         icon: definitionForm.icon || undefined,
         isSystem: definitionForm.isSystem,
@@ -539,6 +808,7 @@ export const MasterDataManagementV2 = () => {
         showToast('success', 'Master Updated', 'Master definition updated successfully.');
       } else {
         const created = await createDefinitionMutation.mutateAsync(payload);
+        setSelectedProject(activeProjectId);
         setSelectedDefinitionId(created.id);
         showToast('success', 'Master Created', 'Master definition created successfully.');
       }
@@ -549,63 +819,35 @@ export const MasterDataManagementV2 = () => {
     }
   };
 
-  const syncParentReference = async ({
-    masterId,
-    recordId,
-    nextParentId,
-    existingReference,
-  }: {
-    masterId: number;
-    recordId: string;
-    nextParentId: string | null;
-    existingReference?: MasterDataReferenceV2 | null;
-  }) => {
-    const currentParentId = existingReference?.toDataId ?? null;
-
-    if (nextParentId === currentParentId) {
-      return;
-    }
-
-    if (existingReference?.id) {
-      await deleteReferenceMutation.mutateAsync({
-        id: existingReference.id,
-        masterId,
-      });
-    }
-
-    if (nextParentId) {
-      await createReferenceMutation.mutateAsync({
-        fromDataId: recordId,
-        toDataId: nextParentId,
-        columnKey: 'parent_id',
-        masterId,
-      });
-    }
-  };
-
   const handleRecordSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!effectiveDefinitionId || !selectedProject) {
+    const activeProjectId = selectedDefinition?.projectId ?? selectedProject;
+
+    if (!effectiveDefinitionId || !activeProjectId) {
       showToast('warn', 'Context Required', 'Select a project and master before saving data.');
       return;
     }
 
-    for (const column of activeColumns) {
-      if (column.isRequired && isEmptyValue(recordForm[column.columnKey])) {
-        showToast('warn', 'Validation Error', `${column.columnLabel} is required.`);
-        return;
+    if (shouldUseStaticFallbackForm) {
+      for (const [key, label] of Object.entries(FALLBACK_FIELD_LABELS)) {
+        if (isEmptyValue(recordForm[key])) {
+          showToast('warn', 'Validation Error', `${label} is required.`);
+          return;
+        }
       }
+    } else {
+      for (const column of activeColumns) {
+        if (column.isRequired && isEmptyValue(recordForm[column.columnKey])) {
+          showToast('warn', 'Validation Error', `${column.columnLabel} is required.`);
+          return;
+        }
 
-      if (column.dataType === 'NUMBER' && recordForm[column.columnKey] === '') {
-        showToast('warn', 'Validation Error', `${column.columnLabel} must be a number.`);
-        return;
+        if (column.dataType === 'NUMBER' && recordForm[column.columnKey] === '') {
+          showToast('warn', 'Validation Error', `${column.columnLabel} must be a number.`);
+          return;
+        }
       }
-    }
-
-    if (!activeColumns.length) {
-      showToast('warn', 'Columns Required', 'No fields are available for this master yet.');
-      return;
     }
 
     if (
@@ -614,11 +856,6 @@ export const MasterDataManagementV2 = () => {
       new Date(recordFixedFields.validFrom) > new Date(recordFixedFields.validTo)
     ) {
       showToast('warn', 'Validation Error', 'Valid From cannot be later than Valid To.');
-      return;
-    }
-
-    if (editingRecord && parentId === editingRecord.id) {
-      showToast('warn', 'Validation Error', 'A record cannot be its own parent.');
       return;
     }
 
@@ -635,14 +872,12 @@ export const MasterDataManagementV2 = () => {
 
       console.log('Master data payload', payload);
 
-      let savedRecord: MasterDataEntryV2;
-
       if (editingRecord) {
-        savedRecord = await updateRecordMutation.mutateAsync({
+        await updateRecordMutation.mutateAsync({
           id: editingRecord.id,
           masterId: effectiveDefinitionId,
           data: {
-            projectId: selectedProject,
+            projectId: activeProjectId,
             data: payload.data,
             valid_from: payload.valid_from,
             valid_to: payload.valid_to,
@@ -652,10 +887,10 @@ export const MasterDataManagementV2 = () => {
           },
         });
       } else {
-        savedRecord = await createRecordMutation.mutateAsync({
+        await createRecordMutation.mutateAsync({
           masterId: payload.master_id,
           tenantId: payload.tenant_id,
-          projectId: selectedProject,
+          projectId: activeProjectId,
           data: payload.data,
           valid_from: payload.valid_from,
           valid_to: payload.valid_to,
@@ -663,22 +898,6 @@ export const MasterDataManagementV2 = () => {
           is_active: payload.is_active,
           isActive: payload.is_active,
         });
-      }
-
-      let parentSyncError: string | null = null;
-
-      try {
-        await syncParentReference({
-          masterId: effectiveDefinitionId,
-          recordId: savedRecord.id,
-          nextParentId: shouldShowParentField ? parentId : null,
-          existingReference: currentParentReference,
-        });
-      } catch (error) {
-        parentSyncError = getErrorMessage(
-          error,
-          'Data was saved, but the parent-child link could not be updated.',
-        );
       }
 
       showToast(
@@ -689,10 +908,6 @@ export const MasterDataManagementV2 = () => {
           : 'Master data created successfully.',
       );
 
-      if (parentSyncError) {
-        showToast('warn', 'Parent Link Error', parentSyncError);
-      }
-
       setRecordDialogVisible(false);
     } catch (error: unknown) {
       showToast('error', 'Data Error', getErrorMessage(error, 'Unable to save master data.'));
@@ -700,7 +915,9 @@ export const MasterDataManagementV2 = () => {
   };
 
   const handleCsvFileSelected = async (file?: File | null) => {
-    if (!file || !effectiveDefinitionId || !selectedProject) {
+    const activeProjectId = selectedDefinition?.projectId ?? selectedProject;
+
+    if (!file || !effectiveDefinitionId || !activeProjectId) {
       return;
     }
 
@@ -708,7 +925,7 @@ export const MasterDataManagementV2 = () => {
       const result = await importCsvMutation.mutateAsync({
         masterId: effectiveDefinitionId,
         tenantId,
-        projectId: selectedProject,
+        projectId: activeProjectId,
         file,
       });
 
@@ -722,47 +939,387 @@ export const MasterDataManagementV2 = () => {
     }
   };
 
-  const leftToolbarTemplate = () => (
-    <div className="d-flex gap-2 flex-wrap align-items-center">
-      <span className="d-flex align-items-center gap-2">
-        <span className="small text-muted">Select Project</span>
-        <Dropdown
-          value={selectedProject}
-          onChange={(event) => setSelectedProject(event.value ?? null)}
-          options={mockProjects}
-          optionLabel="name"
-          optionValue="id"
-          placeholder="Select project"
-          className="w-100"
-          style={{ minWidth: '16rem' }}
-          filter
-        />
-      </span>
+  const tenantFilterOptions = [
+    { label: 'All Tenants', value: 'all' },
+    { label: `Tenant ${tenantId}`, value: `tenant-${tenantId}` },
+  ];
+
+  const dialogProjectName =
+    mockProjects.find((project) => project.id === (definitionForm.projectId ?? selectedProject))
+      ?.name ?? 'Not selected';
+
+  const selectedDefinitionProjectName =
+    selectedDefinition?.project?.name ??
+    mockProjects.find((project) => project.id === selectedDefinition?.projectId)?.name ??
+    'No type assigned';
+
+  const selectedDefinitionColumnCount =
+    selectedDefinition && selectedDefinition.id === effectiveDefinitionId
+      ? columnDefinitions.length
+      : selectedDefinition?.columnDefinitions?.length ?? 0;
+  const selectedDefinitionRowCount = selectedDefinition?._count?.masterData ?? records.length;
+  const fromMasterOptions = allTenantDefinitions
+    .map((definition) => ({
+      label: `${definition.name} (${definition.code})`,
+      value: definition.code,
+    }));
+  const toMasterOptions = allTenantDefinitions
+    .filter((definition) => definition.code !== columnForm.fromMasterCode)
+    .map((definition) => ({
+      label: `${definition.name} (${definition.code})`,
+      value: definition.code,
+    }));
+
+  const handleDefinitionRowClick = (definitionId: number) => {
+    setSelectedDefinitionId(definitionId);
+
+    if (typeof document !== 'undefined') {
+      window.setTimeout(() => {
+        document
+          .getElementById('master-definition-detail')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+    }
+  };
+
+  const definitionRows = useMemo<DefinitionTableRow[]>(
+    () =>
+      filteredDefinitions.map((definition) => ({
+        ...definition,
+        projectLabel:
+          definition.project?.name ??
+          mockProjects.find((project) => project.id === definition.projectId)?.name ??
+          'No project',
+        columnCount:
+          definition.id === effectiveDefinitionId
+            ? columnDefinitions.length
+            : definition.columnDefinitions?.length ?? 0,
+        rowCount: definition._count?.masterData ?? 0,
+      })),
+    [filteredDefinitions, effectiveDefinitionId, columnDefinitions],
+  );
+
+  const recordRows = useMemo<RecordTableRow[]>(
+    () =>
+      records.map((record) => ({
+        ...record,
+        detailsLabel: getRecordLabel(record, activeColumns) || selectedDefinition?.name || '-',
+        validFromLabel: toDateInputValue(record.data?.valid_from),
+        validToLabel: toDateInputValue(record.data?.valid_to),
+        sortOrderValue: toNumberValue(record.data?.sort_order, 0),
+      })),
+    [records, activeColumns, selectedDefinition],
+  );
+
+  const {
+    data: definitionTableData,
+    selectedRows: selectedDefinitionRows,
+    filters: definitionTableFilters,
+    globalFilter: definitionTableGlobalFilter,
+    handleSelectionChange: handleDefinitionSelectionChange,
+    handleGlobalFilterChange: handleDefinitionGlobalFilterChange,
+    handleFiltersChange: handleDefinitionFiltersChange,
+    clearFilters: clearDefinitionTableFilters,
+  } = useDataTableManager<DefinitionTableRow>(definitionRows);
+
+  const {
+    data: recordTableData,
+    selectedRows: selectedRecordRows,
+    filters: recordTableFilters,
+    globalFilter: recordTableGlobalFilter,
+    handleSelectionChange: handleRecordSelectionChange,
+    handleGlobalFilterChange: handleRecordGlobalFilterChange,
+    handleFiltersChange: handleRecordFiltersChange,
+    clearFilters: clearRecordTableFilters,
+  } = useDataTableManager<RecordTableRow>(recordRows);
+
+  const definitionTableConfig = useMemo<ReusableDataTableConfig<DefinitionTableRow>>(
+    () => ({
+      columns: [
+        { field: 'id', header: 'ID', width: '6%', filterType: 'none' },
+        {
+          field: 'name',
+          header: 'Master Name',
+          width: '22%',
+          filterType: 'text',
+          body: (row) => <span className="font-semibold">{row.name}</span>,
+        },
+        {
+          field: 'code',
+          header: 'Code',
+          width: '12%',
+          filterType: 'text',
+          body: (row) => <span className="badge bg-info">{row.code}</span>,
+        },
+        { field: 'projectLabel', header: 'Project', width: '18%', filterType: 'text' },
+        { field: 'columnCount', header: 'Columns', width: '10%', filterType: 'number' },
+        {
+          field: 'rowCount',
+          header: 'Data Rows',
+          width: '10%',
+          filterType: 'number',
+          body: (row) => formatIndianCount(row.rowCount),
+        },
+        {
+          field: 'isActive',
+          header: 'Status',
+          width: '10%',
+          filterType: 'select',
+          filterOptions: [
+            { label: 'Active', value: true },
+            { label: 'Inactive', value: false },
+          ],
+          body: (row) => (
+            <Tag
+              value={row.isActive ? 'Active' : 'Inactive'}
+              severity={row.isActive ? 'success' : 'danger'}
+            />
+          ),
+        },
+        {
+          field: 'createdAt',
+          header: 'Created Date',
+          width: '12%',
+          filterType: 'date',
+          body: (row) => new Date(row.createdAt).toLocaleDateString(),
+        },
+      ],
+      dataKey: 'id',
+      rows: 10,
+      rowsPerPageOptions: [5, 10, 25, 50],
+      globalFilterFields: ['name', 'code', 'description', 'projectLabel'],
+      selectable: true,
+      selectionMode: 'multiple',
+      paginator: true,
+      stripedRows: true,
+      showGridlines: true,
+      emptyMessage: 'No master definitions found.',
+    }),
+    [],
+  );
+
+  const recordTableConfig = useMemo<ReusableDataTableConfig<RecordTableRow>>(
+    () => ({
+      columns: [
+        ...(listableColumns.length
+          ? listableColumns.map((column) => ({
+              field: `data.${column.columnKey}`,
+              header: column.columnLabel,
+              width: '18%',
+              filterType:
+                column.dataType === 'NUMBER'
+                  ? 'number'
+                  : column.dataType === 'DATE'
+                    ? 'date'
+                    : 'text',
+              body: (row: RecordTableRow) => formatCellValue(row.data?.[column.columnKey]),
+            }))
+          : [
+              {
+                field: 'detailsLabel',
+                header: 'Details',
+                width: '28%',
+                filterType: 'text',
+                body: (row: RecordTableRow) => (
+                  <span className="font-semibold">{formatCellValue(row.detailsLabel)}</span>
+                ),
+              },
+            ]),
+        {
+          field: 'validFromLabel',
+          header: 'Valid From',
+          width: '12%',
+          filterType: 'date',
+          body: (row) => formatCellValue(row.validFromLabel),
+        },
+        {
+          field: 'validToLabel',
+          header: 'Valid To',
+          width: '12%',
+          filterType: 'date',
+          body: (row) => formatCellValue(row.validToLabel),
+        },
+        {
+          field: 'sortOrderValue',
+          header: 'Sort Order',
+          width: '10%',
+          filterType: 'number',
+        },
+        {
+          field: 'isActive',
+          header: 'Status',
+          width: '10%',
+          filterType: 'select',
+          filterOptions: [
+            { label: 'Active', value: true },
+            { label: 'Inactive', value: false },
+          ],
+          body: (row) => (
+            <Tag
+              value={row.isActive ? 'Active' : 'Inactive'}
+              severity={row.isActive ? 'success' : 'danger'}
+            />
+          ),
+        },
+        {
+          field: 'createdAt',
+          header: 'Created Date',
+          width: '12%',
+          filterType: 'date',
+          body: (row) => new Date(row.createdAt).toLocaleDateString(),
+        },
+      ],
+      dataKey: 'id',
+      rows: 10,
+      rowsPerPageOptions: [5, 10, 25, 50],
+      globalFilterFields: listableColumns.length
+        ? listableColumns.map((column) => `data.${column.columnKey}`)
+        : ['detailsLabel'],
+      selectable: true,
+      selectionMode: 'multiple',
+      paginator: true,
+      stripedRows: true,
+      showGridlines: true,
+      emptyMessage: 'No data rows yet. Add a record to start saving master data.',
+    }),
+    [listableColumns],
+  );
+
+  const definitionRowActions = useMemo<RowAction<DefinitionTableRow>[]>(
+    () => [
+      {
+        icon: 'pi pi-arrow-right',
+        label: 'Open',
+        severity: 'secondary',
+        onClick: (definition) => handleDefinitionRowClick(definition.id),
+        tooltip: 'Open workspace',
+      },
+      {
+        icon: 'pi pi-pencil',
+        label: 'Edit',
+        severity: 'info',
+        onClick: (definition) => openDefinitionDialog(definition),
+        tooltip: 'Edit',
+      },
+      {
+        icon: 'pi pi-trash',
+        label: 'Delete',
+        severity: 'error',
+        visible: (definition) => !definition.isSystem,
+        onClick: async (definition) => {
+          if (!confirm(`Delete master "${definition.name}" and all its data?`)) {
+            return;
+          }
+
+          await deleteDefinitionMutation.mutateAsync(definition.id);
+          showToast('success', 'Master Deleted', 'Master definition deleted successfully.');
+        },
+        tooltip: 'Delete',
+      },
+    ],
+    [deleteDefinitionMutation],
+  );
+
+  const recordRowActions = useMemo<RowAction<RecordTableRow>[]>(
+    () => [
+      {
+        icon: 'pi pi-pencil',
+        label: 'Edit',
+        severity: 'info',
+        onClick: (record) => openRecordDialog(record),
+        tooltip: 'Edit',
+      },
+      {
+        icon: 'pi pi-trash',
+        label: 'Delete',
+        severity: 'error',
+        onClick: async (record) => {
+          if (
+            !confirm(
+              `Delete "${getRecordLabel(record, activeColumns)}" from ${selectedDefinition?.name}?`,
+            )
+          ) {
+            return;
+          }
+
+          await deleteRecordMutation.mutateAsync({
+            id: record.id,
+            masterId: selectedDefinition!.id,
+          });
+          showToast('success', 'Data Deleted', 'Master data deleted successfully.');
+        },
+        tooltip: 'Delete',
+      },
+    ],
+    [activeColumns, deleteRecordMutation, selectedDefinition],
+  );
+
+  const clearDefinitionFilters = () => {
+    clearDefinitionTableFilters();
+    handleDefinitionGlobalFilterChange('');
+    handleDefinitionFiltersChange({});
+    setSelectedTenantFilter('all');
+    setSelectedProject(null);
+  };
+
+  const clearRecordFilters = () => {
+    clearRecordTableFilters();
+    handleRecordGlobalFilterChange('');
+    handleRecordFiltersChange({});
+  };
+
+  const definitionLeftToolbarTemplate = () => (
+    <Button
+      label="Add Master"
+      icon="pi pi-plus"
+      severity="success"
+      onClick={() => openDefinitionDialog()}
+    />
+  );
+
+  const definitionRightToolbarTemplate = () => (
+    <div className="d-flex gap-2 flex-wrap">
       <Button
-        label="Add Master"
-        icon="pi pi-plus"
-        onClick={() => openDefinitionDialog()}
-        disabled={!selectedProject}
+        label="Clear Filters"
+        icon="pi pi-filter-slash"
+        severity="secondary"
+        outlined
+        onClick={clearDefinitionFilters}
       />
       <Button
-        label="Add Data"
-        icon="pi pi-database"
-        severity="success"
-        onClick={() => openRecordDialog()}
-        disabled={!selectedProject || !effectiveDefinitionId}
-      />
-      <Button
-        label="Import CSV"
+        label="CSV"
         icon="pi pi-upload"
-        severity="warning"
+        severity="info"
+        rounded
         onClick={() => csvInputRef.current?.click()}
         disabled={
-          !selectedProject ||
           !effectiveDefinitionId ||
           !selectedDefinition?.allowImport ||
           importCsvMutation.isPending
         }
       />
+      <Button
+        label="Add Data"
+        icon="pi pi-plus"
+        severity="success"
+        rounded
+        onClick={() => openRecordDialog()}
+        disabled={!selectedDefinition}
+      />
+      <Button
+        label="Add Column"
+        icon="pi pi-table"
+        severity="warning"
+        rounded
+        onClick={openColumnDialog}
+        disabled={!selectedDefinition}
+      />
+    </div>
+  );
+
+  return (
+    <div className="p-4" style={{ background: '#f6f8ff', minHeight: '100%' }}>
+      <Toast ref={toastRef} />
       <input
         ref={csvInputRef}
         type="file"
@@ -774,24 +1331,464 @@ export const MasterDataManagementV2 = () => {
           event.currentTarget.value = '';
         }}
       />
-    </div>
-  );
 
-  const rightToolbarTemplate = () => (
-    <InputText
-      value={definitionSearch}
-      onChange={(event) => setDefinitionSearch(event.target.value)}
-      placeholder="Search masters"
-    />
-  );
+      <div className="mb-4">
+        <h1 className="h2 mb-3">Master Data Management</h1>
+        <Toolbar left={definitionLeftToolbarTemplate} right={definitionRightToolbarTemplate} className="mb-3" />
+      </div>
 
-  return (
-    <div className="p-4">
-      <Toast ref={toastRef} />
-      <Toolbar left={leftToolbarTemplate} right={rightToolbarTemplate} className="mb-4" />
+      <div className="card border-0 shadow-sm mb-4">
+        <div className="card-body">
+          <div className="row g-3 align-items-end">
+            <div className="col-lg-3">
+              <label className="form-label">Tenant</label>
+              <Dropdown
+                value={selectedTenantFilter}
+                onChange={(event) => setSelectedTenantFilter(event.value)}
+                options={tenantFilterOptions}
+                placeholder="All Tenants"
+                className="w-100"
+              />
+            </div>
+            <div className="col-lg-3">
+              <label className="form-label">Project</label>
+              <Dropdown
+                value={selectedProject}
+                onChange={(event) => setSelectedProject(event.value ?? null)}
+                options={mockProjects}
+                optionLabel="name"
+                optionValue="id"
+                placeholder="All Projects"
+                className="w-100"
+                showClear
+                filter
+              />
+            </div>
+            <div className="col-lg-6">
+              <div className="text-muted small">
+                {selectedProjectOption
+                  ? `Showing ${selectedProjectOption.name} masters for tenant ${tenantId}.`
+                  : `Showing all masters for tenant ${tenantId}.`}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <ReusableDataTable<DefinitionTableRow>
+        data={definitionTableData}
+        config={definitionTableConfig}
+        loading={false}
+        selectedRows={selectedDefinitionRows}
+        onSelectionChange={handleDefinitionSelectionChange}
+        onGlobalFilterChange={handleDefinitionGlobalFilterChange}
+        onFiltersChange={handleDefinitionFiltersChange}
+        rowActions={definitionRowActions}
+        externalFilters={definitionTableFilters}
+        externalGlobalFilter={definitionTableGlobalFilter}
+      />
+
+      <div className="mt-5" id="master-definition-detail">
+        <div className="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
+          <div>
+            <h2 className="h3 mb-1">
+              {selectedDefinition?.name || 'Master Workspace'}
+            </h2>
+            <div className="text-muted small">
+              {selectedDefinition
+                ? `${selectedDefinition.code} • ${selectedDefinitionProjectName}`
+                : 'Select a master definition above to manage its rows and columns.'}
+            </div>
+          </div>
+
+          {selectedDefinition ? (
+            <div className="d-flex gap-2 flex-wrap">
+              <Button
+                label="Edit Master"
+                icon="pi pi-pencil"
+                severity="info"
+                onClick={() => openDefinitionDialog(selectedDefinition)}
+              />
+              <Button
+                label="Clear Filters"
+                icon="pi pi-filter-slash"
+                severity="secondary"
+                outlined
+                onClick={clearRecordFilters}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        {selectedDefinition ? (
+          <>
+            <div className="d-flex flex-wrap gap-2 mb-3">
+              <Tag value={`${selectedDefinitionColumnCount} Columns`} severity="info" />
+              <Tag value={`${formatIndianCount(selectedDefinitionRowCount)} Rows`} severity="contrast" />
+              <Tag
+                value={selectedDefinition.allowImport ? 'Import Allowed' : 'Import Blocked'}
+                severity={selectedDefinition.allowImport ? 'success' : 'danger'}
+              />
+              <Tag
+                value={selectedDefinition.isActive ? 'Active' : 'Inactive'}
+                severity={selectedDefinition.isActive ? 'success' : 'danger'}
+              />
+            </div>
+
+            {activeColumns.length ? (
+              <div className="mb-3 d-flex flex-wrap gap-2">
+                {activeColumns.map((column) => (
+                  <Tag
+                    key={column.id}
+                    value={`${column.columnLabel} (${column.columnKey})`}
+                    severity={column.isRequired ? 'warning' : 'info'}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="alert alert-info">
+                No <code>master_column_definition</code> rows are configured for this master yet.
+                Add Data will use the fallback Country/State/District/Block form.
+              </div>
+            )}
+
+            <ReusableDataTable<RecordTableRow>
+              data={recordTableData}
+              config={recordTableConfig}
+              loading={false}
+              selectedRows={selectedRecordRows}
+              onSelectionChange={handleRecordSelectionChange}
+              onGlobalFilterChange={handleRecordGlobalFilterChange}
+              onFiltersChange={handleRecordFiltersChange}
+              rowActions={recordRowActions}
+              externalFilters={recordTableFilters}
+              externalGlobalFilter={recordTableGlobalFilter}
+            />
+          </>
+        ) : (
+          <div className="card border-0 shadow-sm">
+            <div className="card-body text-muted">
+              Choose a master from the table above to manage columns and data rows.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {false && (
+
+      <div
+        className="card border-0 shadow-sm overflow-hidden mb-4"
+        style={{ borderRadius: '24px' }}
+      >
+        <div className="border-bottom bg-white px-4 py-3 d-flex justify-content-between align-items-center gap-3 flex-wrap">
+          <div>
+            <h1 className="h4 mb-1 fw-semibold" style={{ color: '#111827' }}>
+              Master Definition
+            </h1>
+            <div className="text-muted small">
+              Define containers first, then manage columns and data from one place.
+            </div>
+          </div>
+
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <Button
+              label="Import CSV"
+              icon="pi pi-upload"
+              outlined
+              onClick={() => csvInputRef.current?.click()}
+              disabled={
+                !effectiveDefinitionId ||
+                !selectedDefinition?.allowImport ||
+                importCsvMutation.isPending
+              }
+              style={{ borderRadius: '14px' }}
+            />
+            <Button
+              label="New Master"
+              icon="pi pi-plus"
+              onClick={() => openDefinitionDialog()}
+              style={{
+                borderRadius: '14px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #7c3aed, #8b5cf6)',
+              }}
+            />
+          </div>
+
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            className="d-none"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              handleCsvFileSelected(file);
+              event.currentTarget.value = '';
+            }}
+          />
+        </div>
+
+        <div className="p-4">
+          {false && (
+          <div
+            className="rounded-4 px-3 py-3 mb-4 d-flex justify-content-between align-items-center gap-3 flex-wrap"
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(124, 58, 237, 0.10), rgba(99, 102, 241, 0.04))',
+              border: '1px solid rgba(139, 92, 246, 0.12)',
+            }}
+          >
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <i className="pi pi-info-circle" style={{ color: '#db2777' }} />
+              <span className="fw-semibold" style={{ color: '#6d28d9' }}>
+                Step 1 of 4 — Pehle master ka container define karo, phir columns aur data
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-link btn-sm p-0 text-decoration-underline"
+              style={{ color: '#6d28d9' }}
+              onClick={() => {
+                if (selectedDefinition) {
+                  handleDefinitionRowClick(selectedDefinition.id);
+                } else {
+                  openDefinitionDialog();
+                }
+              }}
+            >
+              Next: Column Definition →
+            </button>
+          </div>
+          )}
+
+          <div className="row g-3 mb-4">
+            <div className="col-lg-4">
+              <div className="position-relative">
+                <i
+                  className="pi pi-search position-absolute top-50 translate-middle-y"
+                  style={{ left: '1rem', color: '#60a5fa' }}
+                />
+                <InputText
+                  value={definitionSearch}
+                  onChange={(event) => setDefinitionSearch(event.target.value)}
+                  placeholder="Search by name or code..."
+                  className="w-100"
+                  style={{
+                    paddingLeft: '2.75rem',
+                    borderRadius: '14px',
+                    minHeight: '3.1rem',
+                  }}
+                />
+              </div>
+            </div>
+            <div className="col-lg-3">
+              <Dropdown
+                value={selectedTenantFilter}
+                onChange={(event) => setSelectedTenantFilter(event.value)}
+                options={tenantFilterOptions}
+                placeholder="All Tenants"
+                className="w-100"
+                style={{ minHeight: '3.1rem' }}
+              />
+            </div>
+            <div className="col-lg-3">
+              <Dropdown
+                value={selectedProject}
+                onChange={(event) => setSelectedProject(event.value ?? null)}
+                options={mockProjects}
+                optionLabel="name"
+                optionValue="id"
+                placeholder="All Types"
+                className="w-100"
+                style={{ minHeight: '3.1rem' }}
+                showClear
+              />
+            </div>
+          </div>
+
+          <div
+            className="card border-0 shadow-sm overflow-hidden"
+            style={{ borderRadius: '18px' }}
+          >
+            <div className="table-responsive">
+              <table className="table align-middle mb-0">
+                <thead style={{ background: '#f8fafc' }}>
+                  <tr className="text-uppercase small text-muted">
+                    <th className="border-0 px-4 py-3">Master</th>
+                    <th className="border-0 px-3 py-3">Code</th>
+                    <th className="border-0 px-3 py-3">Scope</th>
+                    <th className="border-0 px-3 py-3">Columns</th>
+                    <th className="border-0 px-3 py-3">Data Rows</th>
+                    <th className="border-0 px-3 py-3">Import</th>
+                    <th className="border-0 px-3 py-3">Status</th>
+                    <th className="border-0 px-4 py-3 text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDefinitions.map((definition) => {
+                    const tileStyle = getDefinitionTileStyle(definition);
+                    const rowCount = definition._count?.masterData ?? 0;
+                    const columnCount = definition.columnDefinitions?.length ?? 0;
+                    const isSelected = effectiveDefinitionId === definition.id;
+
+                    return (
+                      <tr
+                        key={definition.id}
+                        onClick={() => handleDefinitionRowClick(definition.id)}
+                        style={{
+                          cursor: 'pointer',
+                          background: isSelected ? 'rgba(139, 92, 246, 0.06)' : 'transparent',
+                        }}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="d-flex align-items-center gap-3">
+                            <div
+                              className="d-inline-flex align-items-center justify-content-center"
+                              style={{
+                                width: '44px',
+                                height: '44px',
+                                borderRadius: '14px',
+                                background: tileStyle.background,
+                                color: tileStyle.color,
+                                fontSize: '1.1rem',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {definition.icon ? (
+                                <i className={definition.icon} />
+                              ) : (
+                                <span className="fw-semibold">
+                                  {(definition.name || definition.code).slice(0, 1).toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              <div className="fw-semibold d-flex align-items-center gap-2">
+                                <span>{definition.name}</span>
+                                {definition.isSystem ? <i className="pi pi-lock text-warning" /> : null}
+                              </div>
+                              <div className="small text-uppercase text-muted">{definition.code}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className="badge rounded-pill px-3 py-2"
+                            style={{ background: '#f1f5f9', color: '#475569' }}
+                          >
+                            {definition.code}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className="badge rounded-pill px-3 py-2 d-inline-flex align-items-center gap-2"
+                            style={{ background: '#ecfeff', color: '#0f766e' }}
+                          >
+                            <span
+                              style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '999px',
+                                background: '#67e8f9',
+                              }}
+                            />
+                            {getScopeLabel(definition)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 fw-semibold" style={{ color: '#7c3aed' }}>
+                          {columnCount} columns
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="fw-semibold" style={{ color: '#8b5cf6' }}>
+                            {formatIndianCount(rowCount)}
+                          </span>{' '}
+                          rows
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className="badge rounded-pill px-3 py-2"
+                            style={{
+                              background: definition.allowImport ? '#dcfce7' : '#fee2e2',
+                              color: definition.allowImport ? '#15803d' : '#b91c1c',
+                            }}
+                          >
+                            {definition.allowImport ? 'Allowed' : 'Blocked'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className="badge rounded-pill px-3 py-2"
+                            style={{
+                              background: definition.isActive ? '#dcfce7' : '#fef3c7',
+                              color: definition.isActive ? '#15803d' : '#b45309',
+                            }}
+                          >
+                            {definition.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-end">
+                          <div className="d-inline-flex gap-2">
+                            <Button
+                              icon="pi pi-arrow-right"
+                              rounded
+                              text
+                              severity="secondary"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleDefinitionRowClick(definition.id);
+                              }}
+                            />
+                            <Button
+                              icon="pi pi-pencil"
+                              rounded
+                              text
+                              severity="secondary"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openDefinitionDialog(definition);
+                              }}
+                            />
+                            <Button
+                              icon="pi pi-trash"
+                              rounded
+                              text
+                              severity="danger"
+                              disabled={definition.isSystem}
+                              onClick={async (event) => {
+                                event.stopPropagation();
+
+                                if (!confirm(`Delete master "${definition.name}" and all its data?`)) {
+                                  return;
+                                }
+
+                                await deleteDefinitionMutation.mutateAsync(definition.id);
+                                showToast(
+                                  'success',
+                                  'Master Deleted',
+                                  'Master definition deleted successfully.',
+                                );
+                              }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {!filteredDefinitions.length && (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-5 text-center text-muted">
+                        No master definitions found. Try another filter or create a new master.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
       <div className="row g-4">
-        <div className="col-xl-4">
+        <div className="col-12 d-none">
           <div className="card border-0 shadow-sm h-100">
             <div className="card-body">
                 <div className="mb-3">
@@ -869,28 +1866,55 @@ export const MasterDataManagementV2 = () => {
           </div>
         </div>
 
-        <div className="col-xl-8">
-          <div className="card border-0 shadow-sm h-100">
-            <div className="card-body">
-              <div className="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div className="col-12" id="master-definition-detail">
+          <div
+            className="card border-0 shadow-sm h-100 overflow-hidden"
+            style={{ borderRadius: '24px' }}
+          >
+            <div className="card-body p-4">
+              <div className="d-flex justify-content-between align-items-start gap-3 mb-4 flex-wrap">
                 <div>
-                  <h2 className="h5 mb-1">
+                  <div
+                    className="small text-uppercase fw-semibold mb-2"
+                    style={{ color: '#8b5cf6', letterSpacing: '0.08em' }}
+                  >
+                    Master Workspace
+                  </div>
+                  <h2 className="h4 mb-1 fw-semibold" style={{ color: '#111827' }}>
                     {selectedDefinition?.name || 'Select a master definition'}
                   </h2>
                   <div className="text-muted small">
                     {selectedDefinition
-                      ? `Manage records for ${selectedDefinition.code}.`
-                      : 'Create or select a master to start adding records.'}
+                      ? `${selectedDefinition.code} • ${selectedDefinitionProjectName}`
+                      : 'Choose a master from the list above to manage records and data rows.'}
                   </div>
                 </div>
 
                 {selectedDefinition ? (
-                  <div className="d-flex gap-2">
+                  <div className="d-flex gap-2 flex-wrap">
                     <Button
+                      label="Add Data"
+                      icon="pi pi-plus"
+                      onClick={() => openRecordDialog()}
+                      style={{
+                        borderRadius: '14px',
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+                      }}
+                    />
+                    <Button
+                      label="Add Column"
+                      icon="pi pi-table"
+                      outlined
+                      onClick={openColumnDialog}
+                      style={{ borderRadius: '14px' }}
+                    />
+                    <Button
+                      label="Edit Master"
                       icon="pi pi-pencil"
-                      rounded
-                      text
+                      outlined
                       onClick={() => openDefinitionDialog(selectedDefinition)}
+                      style={{ borderRadius: '14px' }}
                     />
                     <Button
                       icon="pi pi-trash"
@@ -911,7 +1935,42 @@ export const MasterDataManagementV2 = () => {
                 ) : null}
               </div>
 
-              {selectedDefinitionDetail?.columnDefinitions?.length ? (
+              {selectedDefinition ? (
+                <div className="d-flex flex-wrap gap-2 mb-4">
+                  <span
+                    className="badge rounded-pill px-3 py-2"
+                    style={{ background: '#ede9fe', color: '#6d28d9' }}
+                  >
+                    {selectedDefinitionColumnCount} columns
+                  </span>
+                  <span
+                    className="badge rounded-pill px-3 py-2"
+                    style={{ background: '#f3e8ff', color: '#7c3aed' }}
+                  >
+                    {formatIndianCount(selectedDefinitionRowCount)} rows
+                  </span>
+                  <span
+                    className="badge rounded-pill px-3 py-2"
+                    style={{
+                      background: selectedDefinition.allowImport ? '#dcfce7' : '#fee2e2',
+                      color: selectedDefinition.allowImport ? '#15803d' : '#b91c1c',
+                    }}
+                  >
+                    {selectedDefinition.allowImport ? 'Import allowed' : 'Import blocked'}
+                  </span>
+                  <span
+                    className="badge rounded-pill px-3 py-2"
+                    style={{
+                      background: selectedDefinition.isActive ? '#dcfce7' : '#fef3c7',
+                      color: selectedDefinition.isActive ? '#15803d' : '#b45309',
+                    }}
+                  >
+                    {selectedDefinition.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              ) : null}
+
+              {activeColumns.length ? (
                 <div className="mb-4">
                   <div className="small text-muted mb-2">Configured Columns</div>
                   <div className="d-flex flex-wrap gap-2">
@@ -925,101 +1984,132 @@ export const MasterDataManagementV2 = () => {
                   </div>
                 </div>
               ) : selectedDefinition ? (
-                <div className="alert alert-warning py-2 mb-4">
-                  Default fields are being used for this master right now.
+                <div
+                  className="rounded-4 px-3 py-3 mb-4"
+                  style={{
+                    background: 'rgba(59, 130, 246, 0.08)',
+                    border: '1px solid rgba(59, 130, 246, 0.14)',
+                    color: '#1d4ed8',
+                  }}
+                >
+                  No <code>master_column_definition</code> rows are configured for this master yet.
+                  Add Data will use the fallback Country/State/District/Block form.
                 </div>
               ) : null}
 
-              <div className="table-responsive">
-                <table className="table table-sm align-middle">
-                  <thead>
-                    <tr>
-                      {listableColumns.length ? (
-                        listableColumns.map((column) => (
-                          <th key={column.id}>{column.columnLabel}</th>
-                        ))
-                      ) : (
-                        <th>Details</th>
-                      )}
-                      <th>Valid From</th>
-                      <th>Valid To</th>
-                      <th>Sort Order</th>
-                      <th>Status</th>
-                      <th className="text-end">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {records.map((record) => (
-                      <tr key={record.id}>
+              <div
+                className="border rounded-4 overflow-hidden"
+                style={{ borderColor: '#e5e7eb', background: '#fff' }}
+              >
+                <div className="table-responsive">
+                  <table className="table align-middle mb-0">
+                    <thead style={{ background: '#f8fafc' }}>
+                      <tr className="text-uppercase small text-muted">
                         {listableColumns.length ? (
                           listableColumns.map((column) => (
-                            <td key={column.id}>
-                              {formatCellValue(record.data?.[column.columnKey])}
-                            </td>
+                            <th key={column.id} className="border-0 px-4 py-3">
+                              {column.columnLabel}
+                            </th>
                           ))
                         ) : (
-                          <td className="text-break">{formatCellValue(record.data)}</td>
+                          <th className="border-0 px-4 py-3">Details</th>
                         )}
-                        <td>{formatCellValue(toDateInputValue(record.data?.valid_from))}</td>
-                        <td>{formatCellValue(toDateInputValue(record.data?.valid_to))}</td>
-                        <td>{formatCellValue(record.data?.sort_order ?? 0)}</td>
-                        <td>
-                          <Tag
-                            value={record.isActive ? 'Active' : 'Inactive'}
-                            severity={record.isActive ? 'success' : 'danger'}
-                          />
-                        </td>
-                        <td className="text-end">
-                          <div className="d-inline-flex gap-2">
-                            <Button
-                              icon="pi pi-pencil"
-                              text
-                              rounded
-                              onClick={() => openRecordDialog(record)}
-                            />
-                            <Button
-                              icon="pi pi-trash"
-                              text
-                              rounded
-                              severity="danger"
-                              onClick={async () => {
-                                if (
-                                  !confirm(
-                                    `Delete "${getRecordLabel(record, activeColumns)}" from ${selectedDefinition?.name}?`,
-                                  )
-                                ) {
-                                  return;
-                                }
-
-                                await deleteRecordMutation.mutateAsync({
-                                  id: record.id,
-                                  masterId: selectedDefinition!.id,
-                                });
-                                showToast('success', 'Data Deleted', 'Master data deleted successfully.');
-                              }}
-                            />
-                          </div>
-                        </td>
+                        <th className="border-0 px-3 py-3">Valid From</th>
+                        <th className="border-0 px-3 py-3">Valid To</th>
+                        <th className="border-0 px-3 py-3">Sort Order</th>
+                        <th className="border-0 px-3 py-3">Status</th>
+                        <th className="border-0 px-4 py-3 text-end">Actions</th>
                       </tr>
-                    ))}
+                    </thead>
+                    <tbody>
+                      {records.map((record) => (
+                        <tr key={record.id}>
+                          {listableColumns.length ? (
+                            listableColumns.map((column) => (
+                              <td key={column.id} className="px-4 py-3">
+                                {formatCellValue(record.data?.[column.columnKey])}
+                              </td>
+                            ))
+                          ) : (
+                            <td className="text-break px-4 py-3">
+                              {formatCellValue(
+                                record.data?.details ||
+                                  record.data?.master_name ||
+                                  selectedDefinition?.name ||
+                                  record.data,
+                              )}
+                            </td>
+                          )}
+                          <td className="px-3 py-3">
+                            {formatCellValue(toDateInputValue(record.data?.valid_from))}
+                          </td>
+                          <td className="px-3 py-3">
+                            {formatCellValue(toDateInputValue(record.data?.valid_to))}
+                          </td>
+                          <td className="px-3 py-3">
+                            {formatCellValue(record.data?.sort_order ?? 0)}
+                          </td>
+                          <td className="px-3 py-3">
+                            <Tag
+                              value={record.isActive ? 'Active' : 'Inactive'}
+                              severity={record.isActive ? 'success' : 'danger'}
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-end">
+                            <div className="d-inline-flex gap-2">
+                              <Button
+                                icon="pi pi-pencil"
+                                text
+                                rounded
+                                onClick={() => openRecordDialog(record)}
+                              />
+                              <Button
+                                icon="pi pi-trash"
+                                text
+                                rounded
+                                severity="danger"
+                                onClick={async () => {
+                                  if (
+                                    !confirm(
+                                      `Delete "${getRecordLabel(record, activeColumns)}" from ${selectedDefinition?.name}?`,
+                                    )
+                                  ) {
+                                    return;
+                                  }
 
-                    {!records.length && (
-                      <tr>
-                        <td
-                          colSpan={(listableColumns.length || 1) + 5}
-                          className="text-muted py-4"
-                        >
-                          No data rows yet. Add a record to start saving master data.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                                  await deleteRecordMutation.mutateAsync({
+                                    id: record.id,
+                                    masterId: selectedDefinition!.id,
+                                  });
+                                  showToast('success', 'Data Deleted', 'Master data deleted successfully.');
+                                }}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+
+                      {!records.length && (
+                        <tr>
+                          <td
+                            colSpan={(listableColumns.length || 1) + 5}
+                            className="text-muted px-4 py-5 text-center"
+                          >
+                            No data rows yet. Add a record to start saving master data.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+      </div>
+      </div>
+      )}
 
       <Dialog
         visible={definitionDialogVisible}
@@ -1032,7 +2122,7 @@ export const MasterDataManagementV2 = () => {
             <div className="alert alert-info py-2 mb-0">
               Tenant ID: <strong>{tenantId}</strong>
               {' • '}
-              Project: <strong>{selectedProjectOption?.name ?? 'Not selected'}</strong>
+              Project: <strong>{dialogProjectName}</strong>
             </div>
 
             <div className="row g-3">
@@ -1052,7 +2142,6 @@ export const MasterDataManagementV2 = () => {
                   optionValue="id"
                   placeholder="Select project"
                   filter
-                  disabled
                 />
               </div>
               <div className="col-md-6">
@@ -1060,28 +2149,23 @@ export const MasterDataManagementV2 = () => {
                 <InputText
                   className="w-100"
                   value={definitionForm.name}
-                onChange={(event) =>
-                  setDefinitionForm((previous) => ({ ...previous, name: event.target.value }))
-                }
-                required
-              />
-            </div>
+                  onChange={(event) => handleDefinitionNameChange(event.target.value)}
+                  required
+                />
+              </div>
               <div className="col-md-12">
                 <label className="form-label">Master Code</label>
                 <InputText
                   className="w-100"
-                value={definitionForm.code}
-                onChange={(event) =>
-                  setDefinitionForm((previous) => ({
-                    ...previous,
-                    code: normalizeCode(event.target.value),
-                  }))
-                }
-                required
-                disabled={!!editingDefinition}
-              />
+                  value={generatedDefinitionCode}
+                  readOnly
+                  required
+                />
+                <small className="text-muted">
+                  Auto-generated as `M_` + first 4 letters of master name + running number.
+                </small>
+              </div>
             </div>
-          </div>
 
           <span>
             <label className="form-label">Description</label>
@@ -1188,6 +2272,156 @@ export const MasterDataManagementV2 = () => {
       </Dialog>
 
       <Dialog
+        visible={columnDialogVisible}
+        onHide={() => setColumnDialogVisible(false)}
+        header="Add Column"
+        modal
+        style={{ width: '36rem' }}
+      >
+        <form onSubmit={handleColumnSubmit} className="d-flex flex-column gap-3">
+          <div className="row g-3">
+            <div className="col-md-6">
+              <label className="form-label">Column Key</label>
+              <InputText
+                className="w-100"
+                value={columnForm.columnKey}
+                onChange={(event) =>
+                  handleColumnFormChange('columnKey', normalizeColumnKey(event.target.value))
+                }
+                placeholder="column_key"
+                required
+              />
+            </div>
+            <div className="col-md-6">
+              <label className="form-label">Column Label</label>
+              <InputText
+                className="w-100"
+                value={columnForm.columnLabel}
+                onChange={(event) =>
+                  handleColumnFormChange('columnLabel', event.target.value)
+                }
+                placeholder="Column Label"
+                required
+              />
+            </div>
+            <div className="col-md-6">
+              <label className="form-label">Data Type</label>
+              <Dropdown
+                className="w-100"
+                value={columnForm.dataType}
+                options={COLUMN_DATA_TYPE_OPTIONS}
+                optionLabel="label"
+                optionValue="value"
+                onChange={(event) =>
+                  handleColumnFormChange('dataType', event.value as ColumnDataTypeOption)
+                }
+              />
+            </div>
+
+            <div className="col-md-6">
+              <label className="form-label">From Master</label>
+              <Dropdown
+                className="w-100"
+                value={columnForm.fromMasterCode}
+                options={fromMasterOptions}
+                optionLabel="label"
+                optionValue="value"
+                onChange={(event) =>
+                  handleColumnFormChange(
+                    'fromMasterCode',
+                    (event.value as string | null) ?? null,
+                  )
+                }
+                placeholder="Select from master"
+                filter
+              />
+            </div>
+            <div className="col-md-6">
+              <label className="form-label">To Master</label>
+              <Dropdown
+                className="w-100"
+                value={columnForm.toMasterCode}
+                options={toMasterOptions}
+                optionLabel="label"
+                optionValue="value"
+                onChange={(event) =>
+                  handleColumnFormChange(
+                    'toMasterCode',
+                    (event.value as string | null) ?? null,
+                  )
+                }
+                placeholder="Select to master"
+                filter
+                disabled={!columnForm.fromMasterCode}
+              />
+            </div>
+            <div className="col-12">
+              <small className="text-muted">
+                From Master shows all earlier defined masters. After you choose one, To Master
+                shows the remaining masters.
+              </small>
+            </div>
+          </div>
+
+          <div className="row g-3">
+            <div className="col-md-4">
+              <label className="form-check">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={columnForm.isRequired}
+                  onChange={(event) =>
+                    handleColumnFormChange('isRequired', event.target.checked)
+                  }
+                />
+                <span className="form-check-label">Required</span>
+              </label>
+            </div>
+            <div className="col-md-4">
+              <label className="form-check">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={columnForm.isSearchable}
+                  onChange={(event) =>
+                    handleColumnFormChange('isSearchable', event.target.checked)
+                  }
+                />
+                <span className="form-check-label">Is Searchable</span>
+              </label>
+            </div>
+            <div className="col-md-4">
+              <label className="form-check">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={columnForm.isListable}
+                  onChange={(event) =>
+                    handleColumnFormChange('isListable', event.target.checked)
+                  }
+                />
+                <span className="form-check-label">Is Listable</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="d-flex justify-content-end gap-2">
+            <Button
+              label="Cancel"
+              type="button"
+              outlined
+              onClick={() => setColumnDialogVisible(false)}
+            />
+            <Button
+              label="Save"
+              type="submit"
+              loading={createColumnMutation.isPending}
+            />
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog
         visible={recordDialogVisible}
         onHide={() => setRecordDialogVisible(false)}
         header={editingRecord ? 'Edit Master Data' : 'Add Master Data'}
@@ -1195,7 +2429,84 @@ export const MasterDataManagementV2 = () => {
         style={{ width: '52rem' }}
       >
         <form onSubmit={handleRecordSubmit} className="d-flex flex-column gap-3">
-          {activeColumns.length ? (
+          {shouldUseStaticFallbackForm ? (
+            <div className="d-flex flex-column gap-3">
+              <div className="alert alert-info py-2 mb-0">
+                No column definitions found for this master. Using the temporary
+                cascading fallback form.
+              </div>
+
+              <div>
+                <label className="form-label">Country</label>
+                <Dropdown
+                  className="w-100"
+                  value={recordForm.country ?? ''}
+                  options={countryOptions}
+                  optionLabel="label"
+                  optionValue="value"
+                  placeholder="Select Country"
+                  onChange={(event) => handleRecordFieldChange('country', event.value ?? '')}
+                  showClear
+                />
+              </div>
+
+              <div>
+                <label className="form-label">State</label>
+                <Dropdown
+                  className="w-100"
+                  value={recordForm.state ?? ''}
+                  options={stateOptions}
+                  optionLabel="label"
+                  optionValue="value"
+                  placeholder="Select State"
+                  onChange={(event) => handleRecordFieldChange('state', event.value ?? '')}
+                  disabled={!selectedCountry}
+                  showClear
+                />
+              </div>
+
+              <div>
+                <label className="form-label">District</label>
+                <Dropdown
+                  className="w-100"
+                  value={recordForm.district ?? ''}
+                  options={districtOptions}
+                  optionLabel="label"
+                  optionValue="value"
+                  placeholder="Select District"
+                  onChange={(event) => handleRecordFieldChange('district', event.value ?? '')}
+                  disabled={!selectedState}
+                  showClear
+                />
+              </div>
+
+              <div>
+                <label className="form-label">Block/Ward</label>
+                <Dropdown
+                  className="w-100"
+                  value={recordForm.block ?? ''}
+                  options={blockOptions}
+                  optionLabel="label"
+                  optionValue="value"
+                  placeholder="Select Block/Ward"
+                  onChange={(event) => handleRecordFieldChange('block', event.value ?? '')}
+                  disabled={!selectedDistrict}
+                  showClear
+                />
+              </div>
+            </div>
+          ) : shouldShowAutoMasterNameField ? (
+            <div className="d-flex flex-column gap-3">
+              <div>
+                <label className="form-label">Master Name</label>
+                <InputText
+                  className="w-100"
+                  value={autoMasterNameValue}
+                  readOnly
+                />
+              </div>
+            </div>
+          ) : (
             <div className="d-flex flex-column gap-3">
               {activeColumns.map((column) => (
                 <DynamicFormField
@@ -1208,30 +2519,7 @@ export const MasterDataManagementV2 = () => {
                 />
               ))}
             </div>
-          ) : (
-            <div className="text-muted">
-              {isColumnDefinitionsLoading
-                ? 'Loading form fields...'
-                : 'No column definitions are available for this master yet.'}
-            </div>
           )}
-
-          {shouldShowParentField ? (
-            <div>
-              <label className="form-label">Parent</label>
-              <Dropdown
-                className="w-100"
-                value={parentId}
-                onChange={(event) => setParentId(event.value ?? null)}
-                options={parentOptions}
-                optionLabel="label"
-                optionValue="value"
-                placeholder="Select Parent"
-                showClear
-                filter
-              />
-            </div>
-          ) : null}
 
           <div className="row g-3">
             <div className="col-md-6">
@@ -1256,17 +2544,19 @@ export const MasterDataManagementV2 = () => {
                 }
               />
             </div>
-            <div className="col-md-6">
-              <label className="form-label">Sort Order</label>
-              <InputNumber
-                className="w-100"
-                value={recordFixedFields.sortOrder}
-                onValueChange={(event) =>
-                  handleRecordFixedFieldChange('sortOrder', event.value ?? 0)
-                }
-                useGrouping={false}
-              />
-            </div>
+            {!shouldUseStaticFallbackForm ? (
+              <div className="col-md-6">
+                <label className="form-label">Sort Order</label>
+                <InputNumber
+                  className="w-100"
+                  value={recordFixedFields.sortOrder}
+                  onValueChange={(event) =>
+                    handleRecordFixedFieldChange('sortOrder', event.value ?? 0)
+                  }
+                  useGrouping={false}
+                />
+              </div>
+            ) : null}
             <div className="col-md-6 d-flex align-items-end">
               <label className="form-check mb-2">
                 <input
@@ -1287,11 +2577,8 @@ export const MasterDataManagementV2 = () => {
             type="submit"
             loading={
               createRecordMutation.isPending ||
-              updateRecordMutation.isPending ||
-              createReferenceMutation.isPending ||
-              deleteReferenceMutation.isPending
+              updateRecordMutation.isPending
             }
-            disabled={!activeColumns.length}
           />
         </form>
       </Dialog>

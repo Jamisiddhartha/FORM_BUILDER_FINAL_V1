@@ -16,6 +16,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Resource } from '../../../common/resource.decorator';
 import { RolesResourcesGuard } from '../../../common/roles-resources.guard';
+import { Public } from '../../../common/public.decorator';
+import { SkipResourceCheck } from '../../../common/skip-resource-check.decorator';
 import { JwtGuard } from '../../auth/guards/jwt.guard';
 import {
   CreateMasterDataDefinitionDto,
@@ -203,6 +205,8 @@ export class MasterDataManagementController {
     return this.service.deleteMasterDefinitionV2(parseInt(id, 10));
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Post('v2/definitions/:id/columns')
   async createMasterColumnDefinitionsV2(
     @Param('id') id: string,
@@ -211,11 +215,15 @@ export class MasterDataManagementController {
     return this.service.createMasterColumnDefinitionsV2(parseInt(id, 10), dtos);
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Get('v2/definitions/:id/columns')
   async getMasterColumnDefinitionsV2(@Param('id') id: string) {
     return this.service.getMasterColumnDefinitionsV2(parseInt(id, 10));
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Put('v2/columns/:columnId')
   async updateMasterColumnDefinitionV2(
     @Param('columnId') columnId: string,
@@ -224,16 +232,22 @@ export class MasterDataManagementController {
     return this.service.updateMasterColumnDefinitionV2(parseInt(columnId, 10), dto);
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Delete('v2/columns/:columnId')
   async deleteMasterColumnDefinitionV2(@Param('columnId') columnId: string) {
     return this.service.deleteMasterColumnDefinitionV2(parseInt(columnId, 10));
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Post('v2/data')
   async createMasterDataV2(@Body() dto: CreateMasterDataDto, @Req() req: any) {
     return this.service.createMasterDataV2({ ...dto, createdBy: String(req.user?.id || 'system') });
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Get('v2/masters/:masterId/data')
   async getMasterDataV2(
     @Param('masterId') masterId: string,
@@ -246,11 +260,15 @@ export class MasterDataManagementController {
     });
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Get('v2/data/:id')
   async getMasterDataEntryV2(@Param('id') id: string) {
     return this.service.getMasterDataEntryV2(BigInt(id));
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Put('v2/data/:id')
   async updateMasterDataV2(@Param('id') id: string, @Body() dto: UpdateMasterDataDto, @Req() req: any) {
     return this.service.updateMasterDataV2(BigInt(id), {
@@ -259,26 +277,36 @@ export class MasterDataManagementController {
     });
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Delete('v2/data/:id')
   async deleteMasterDataV2(@Param('id') id: string) {
     return this.service.deleteMasterDataV2(BigInt(id));
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Post('v2/references')
   async createMasterDataReferenceV2(@Body() dto: CreateMasterDataReferenceDto) {
     return this.service.createMasterDataReferenceV2(dto);
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Get('v2/data/:id/references')
   async getMasterDataReferencesV2(@Param('id') id: string) {
     return this.service.getMasterDataReferencesV2(BigInt(id));
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Delete('v2/references/:id')
   async deleteMasterDataReferenceV2(@Param('id') id: string) {
     return this.service.deleteMasterDataReferenceV2(BigInt(id));
   }
 
+  @Public()
+  @SkipResourceCheck()
   @Post('v2/masters/:masterId/import-csv')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   async importMasterDataCsvV2(
