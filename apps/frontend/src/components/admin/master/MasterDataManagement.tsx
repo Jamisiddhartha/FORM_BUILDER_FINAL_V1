@@ -24,6 +24,7 @@ import { ReusableDataTableConfig, RowAction } from '@/components/DataTable/types
 import { DynamicFormField } from './DynamicFormField';
 import { ColumnDefinitionManager } from './ColumnDefinitionManager';
 import { HierarchicalCascadingDemo } from './HierarchicalCascadingDemo';
+import { MasterDataMappingDialog } from './MasterDataMappingDialog';
 import {
   MasterDataDefinition,
   MasterDataRecord,
@@ -302,6 +303,7 @@ export const MasterDataManagement = () => {
   const [definitionDialogVisible, setDefinitionDialogVisible] = useState(false);
   const [recordDialogVisible, setRecordDialogVisible] = useState(false);
   const [columnDialogVisible, setColumnDialogVisible] = useState(false);
+  const [mappingDialogVisible, setMappingDialogVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'records' | 'columns' | 'demo'>('records');
 
   const [editingDefinition, setEditingDefinition] = useState<MasterDataDefinition | null>(null);
@@ -754,6 +756,14 @@ export const MasterDataManagement = () => {
                   onClick={() => setColumnDialogVisible(true)}
                 />
               )}
+              {activeTab === 'records' && effectiveDefinitionId && (
+                <Button
+                  label="Create Mapping"
+                  icon="pi pi-link"
+                  severity="info"
+                  onClick={() => setMappingDialogVisible(true)}
+                />
+              )}
               {selectedDefinitionDetail?.uploadBatches?.length && activeTab === 'records' ? (
                 <Tag value={`Last upload: ${selectedDefinitionDetail.uploadBatches[0].status}`} severity="info" />
               ) : null}
@@ -991,6 +1001,15 @@ export const MasterDataManagement = () => {
           />
         </form>
       </Dialog>
+
+      <MasterDataMappingDialog
+        visible={mappingDialogVisible}
+        onHide={() => setMappingDialogVisible(false)}
+        masterId={selectedDefinitionId}
+        masterCode={selectedDefinition?.code || ''}
+        masterData={flatRecords}
+        allMasters={definitions}
+      />
     </div>
   );
 };
